@@ -45,5 +45,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>TrustCard needs camera access to scan QR codes and capture profile photos for identity verification</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>TrustCard needs access to your photo library to upload identity documents</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>TrustCard needs permission to save photos</string>
 </dict>
 </plist>
