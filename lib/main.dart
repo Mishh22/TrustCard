@@ -50,14 +50,19 @@ class TrustCardApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-        return MultiProvider(
-          providers: [
-            ChangeNotifierProvider(create: (_) => AuthProvider()),
-            ChangeNotifierProvider(create: (_) => CardProvider()),
-            ChangeNotifierProvider(create: (_) => LanguageService()..initialize()),
-          ],
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => CardProvider()),
+        ChangeNotifierProvider(create: (_) => LanguageService()),
+      ],
       child: Consumer<LanguageService>(
         builder: (context, languageService, child) {
+          // Initialize LanguageService if not already initialized
+          if (languageService.currentLocale.languageCode == 'en') {
+            languageService.initialize();
+          }
+          
           return MaterialApp.router(
             title: 'TrustCard',
             debugShowCheckedModeBanner: false,

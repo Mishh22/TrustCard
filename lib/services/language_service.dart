@@ -112,8 +112,12 @@ class LanguageService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final savedLanguage = prefs.getString(_languageKey);
     
-    if (savedLanguage != null && _supportedLanguages.containsValue(Locale(savedLanguage))) {
-      _currentLocale = Locale(savedLanguage);
+    if (savedLanguage != null) {
+      // Check if the saved language code exists in our supported languages
+      final supportedLanguageCodes = _supportedLanguages.values.map((locale) => locale.languageCode).toList();
+      if (supportedLanguageCodes.contains(savedLanguage)) {
+        _currentLocale = Locale(savedLanguage);
+      }
     }
     
     notifyListeners();
