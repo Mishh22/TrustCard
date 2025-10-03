@@ -1,0 +1,1 @@
+ /Users/manishyadav/AndroidStudioProjects/TestCard/ios/.dart_tool/flutter_build/593a6495796c43603df55ffc7090b89a/native_assets.json: 
