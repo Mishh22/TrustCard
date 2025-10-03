@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-// import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import 'providers/card_provider.dart';
 import 'providers/auth_provider.dart';
@@ -22,9 +22,9 @@ void main() async {
   // DEBUG: Print to console to verify our app is running
   print("🚀 TRUSTCARD APP STARTING - This is our TrustCard app, not the demo!");
   
-  // Initialize Firebase (temporarily disabled for testing)
-  // await Firebase.initializeApp();
-  // await FirebaseService.initialize();
+  // Initialize Firebase
+  await Firebase.initializeApp();
+  await FirebaseService.initialize();
   
   // Set preferred orientations
   await SystemChrome.setPreferredOrientations([

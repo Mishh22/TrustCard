@@ -1,22 +1,81 @@
-// Firebase service temporarily disabled for iOS compatibility
-// import 'package:firebase_auth/firebase_auth.dart';
-// import 'package:cloud_firestore/cloud_firestore.dart';
-// import 'package:firebase_storage/firebase_storage.dart';
-// import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'dart:io';
 
 class FirebaseService {
-  // Firebase services temporarily disabled for iOS compatibility
-  // static final FirebaseAuth _auth = FirebaseAuth.instance;
-  // static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  // static final FirebaseStorage _storage = FirebaseStorage.instance;
-  // static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  static final FirebaseAuth _auth = FirebaseAuth.instance;
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static final FirebaseStorage _storage = FirebaseStorage.instance;
+  static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  static final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   // Authentication
-  static Future<dynamic> signInWithPhoneNumber(String phoneNumber) async {
+  static Future<UserCredential?> signInWithEmailAndPassword(String email, String password) async {
     try {
-      // Stub implementation for development
-      print("Firebase Auth disabled - using stub implementation");
+      return await _auth.signInWithEmailAndPassword(email: email, password: password);
+    } catch (e) {
+      print("Error in signInWithEmailAndPassword: $e");
+      return null;
+    }
+  }
+
+  static Future<UserCredential?> createUserWithEmailAndPassword(String email, String password) async {
+    try {
+      return await _auth.createUserWithEmailAndPassword(email: email, password: password);
+    } catch (e) {
+      print("Error in createUserWithEmailAndPassword: $e");
+      return null;
+    }
+  }
+
+  static Future<UserCredential?> signInWithGoogle() async {
+    try {
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return null;
+      
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      
+      return await _auth.signInWithCredential(credential);
+    } catch (e) {
+      print("Error in signInWithGoogle: $e");
+      return null;
+    }
+  }
+
+  static Future<UserCredential?> signInWithApple() async {
+    try {
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+      );
+      
+      final oauthCredential = OAuthProvider("apple.com").credential(
+        idToken: credential.identityToken,
+        accessToken: credential.authorizationCode,
+      );
+      
+      return await _auth.signInWithCredential(oauthCredential);
+    } catch (e) {
+      print("Error in signInWithApple: $e");
+      return null;
+    }
+  }
+
+  static Future<ConfirmationResult?> signInWithPhoneNumber(String phoneNumber) async {
+    try {
+      // Using stub implementation for now
+      print('Firebase Auth disabled - using stub implementation for phone number');
       return null;
     } catch (e) {
       print("Error in signInWithPhoneNumber: $e");
@@ -24,10 +83,10 @@ class FirebaseService {
     }
   }
 
-  static Future<dynamic> signInAnonymously() async {
+  static Future<UserCredential?> signInAnonymously() async {
     try {
-      // Stub implementation for development
-      print("Firebase Auth disabled - using stub implementation");
+      // Using stub implementation for now
+      print('Firebase Auth disabled - using stub implementation for anonymous sign-in');
       return null;
     } catch (e) {
       print("Error in signInAnonymously: $e");
@@ -35,16 +94,16 @@ class FirebaseService {
     }
   }
 
-  static dynamic getCurrentUser() {
-    // Stub implementation for development
-    print("Firebase Auth disabled - using stub implementation");
+  static User? getCurrentUser() {
+    // Using stub implementation for now
+    print('Firebase Auth disabled - using stub implementation for getCurrentUser');
     return null;
   }
 
   static Future<void> signOut() async {
     try {
-      // Stub implementation for development
-      print("Firebase Auth disabled - using stub implementation");
+      // Using stub implementation for now
+      print('Firebase Auth disabled - using stub implementation for signOut');
     } catch (e) {
       print("Error in signOut: $e");
     }
@@ -53,8 +112,8 @@ class FirebaseService {
   // Firestore
   static Future<void> saveUserCard(Map<String, dynamic> cardData) async {
     try {
-      // Stub implementation for development
-      print("Firebase Firestore disabled - using stub implementation");
+      // Using stub implementation for now
+      print('Firebase Firestore disabled - using stub implementation for saveUserCard');
     } catch (e) {
       print("Error in saveUserCard: $e");
     }
@@ -62,8 +121,8 @@ class FirebaseService {
 
   static Future<Map<String, dynamic>?> getUserCard(String userId) async {
     try {
-      // Stub implementation for development
-      print("Firebase Firestore disabled - using stub implementation");
+      // Using stub implementation for now
+      print('Firebase Firestore disabled - using stub implementation for getUserCard');
       return null;
     } catch (e) {
       print("Error in getUserCard: $e");
@@ -73,8 +132,8 @@ class FirebaseService {
 
   static Future<void> updateUserCard(String userId, Map<String, dynamic> cardData) async {
     try {
-      // Stub implementation for development
-      print("Firebase Firestore disabled - using stub implementation");
+      // Using stub implementation for now
+      print('Firebase Firestore disabled - using stub implementation for updateUserCard');
     } catch (e) {
       print("Error in updateUserCard: $e");
     }
@@ -82,8 +141,8 @@ class FirebaseService {
 
   static Future<void> deleteUserCard(String userId) async {
     try {
-      // Stub implementation for development
-      print("Firebase Firestore disabled - using stub implementation");
+      // Using stub implementation for now
+      print('Firebase Firestore disabled - using stub implementation for deleteUserCard');
     } catch (e) {
       print("Error in deleteUserCard: $e");
     }
@@ -91,8 +150,8 @@ class FirebaseService {
 
   static Future<void> saveVerificationRequest(Map<String, dynamic> requestData) async {
     try {
-      // Stub implementation for development
-      print("Firebase Firestore disabled - using stub implementation");
+      // Using stub implementation for now
+      print('Firebase Firestore disabled - using stub implementation for saveVerificationRequest');
     } catch (e) {
       print("Error in saveVerificationRequest: $e");
     }
@@ -100,8 +159,8 @@ class FirebaseService {
 
   static Future<void> saveActivityLog(Map<String, dynamic> activityData) async {
     try {
-      // Stub implementation for development
-      print("Firebase Firestore disabled - using stub implementation");
+      // Using stub implementation for now
+      print('Firebase Firestore disabled - using stub implementation for saveActivityLog');
     } catch (e) {
       print("Error in saveActivityLog: $e");
     }
@@ -110,8 +169,8 @@ class FirebaseService {
   // Storage
   static Future<String?> uploadFile(File file, String path) async {
     try {
-      // Stub implementation for development
-      print("Firebase Storage disabled - using stub implementation");
+      // Using stub implementation for now
+      print('Firebase Storage disabled - using stub implementation for uploadFile');
       return null;
     } catch (e) {
       print("Error in uploadFile: $e");
@@ -121,8 +180,8 @@ class FirebaseService {
 
   static Future<void> deleteFile(String path) async {
     try {
-      // Stub implementation for development
-      print("Firebase Storage disabled - using stub implementation");
+      // Using stub implementation for now
+      print('Firebase Storage disabled - using stub implementation for deleteFile');
     } catch (e) {
       print("Error in deleteFile: $e");
     }
@@ -131,8 +190,8 @@ class FirebaseService {
   // Messaging
   static Future<String?> getFCMToken() async {
     try {
-      // Stub implementation for development
-      print("Firebase Messaging disabled - using stub implementation");
+      // Using stub implementation for now
+      print('Firebase Messaging disabled - using stub implementation for getFCMToken');
       return null;
     } catch (e) {
       print("Error in getFCMToken: $e");
@@ -142,8 +201,8 @@ class FirebaseService {
 
   static Future<void> subscribeToTopic(String topic) async {
     try {
-      // Stub implementation for development
-      print("Firebase Messaging disabled - using stub implementation");
+      // Using stub implementation for now
+      print('Firebase Messaging disabled - using stub implementation for subscribeToTopic');
     } catch (e) {
       print("Error in subscribeToTopic: $e");
     }
@@ -151,8 +210,8 @@ class FirebaseService {
 
   static Future<void> unsubscribeFromTopic(String topic) async {
     try {
-      // Stub implementation for development
-      print("Firebase Messaging disabled - using stub implementation");
+      // Using stub implementation for now
+      print('Firebase Messaging disabled - using stub implementation for unsubscribeFromTopic');
     } catch (e) {
       print("Error in unsubscribeFromTopic: $e");
     }

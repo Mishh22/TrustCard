@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "679402705269",
+    "project_id": "trustcard-1e232",
+    "storage_bucket": "trustcard-1e232.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:679402705269:android:8c3d8f6321cfea911c033c",
+        "android_client_info": {
+          "package_name": "com.example.trustcard"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "679402705269-vnkrhesata6v2rigpc27ah8pingg1vf6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAt6WuHBSqs-fyvw_Yb7NP-Kfy1-F6fNEQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "679402705269-vnkrhesata6v2rigpc27ah8pingg1vf6.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "679402705269-6km9m2dc2ft43ap23ndvi202agtd2efd.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.trustcard"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
