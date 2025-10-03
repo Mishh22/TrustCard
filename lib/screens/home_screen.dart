@@ -6,6 +6,7 @@ import '../providers/card_provider.dart';
 import '../widgets/digital_card_widget.dart';
 import '../models/user_card.dart';
 import '../utils/app_theme.dart';
+import '../utils/responsive_helper.dart';
 import 'notification_center_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -28,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.backgroundLight,
       body: SafeArea(
         child: Consumer2<AuthProvider, CardProvider>(
           builder: (context, authProvider, cardProvider, child) {
@@ -60,14 +62,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHomeContent(BuildContext context, AuthProvider authProvider, CardProvider cardProvider) {
-    return CustomScrollView(
-      slivers: [
+    return Container(
+      color: AppTheme.backgroundLight,
+      child: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
         // App Bar
         SliverAppBar(
-          expandedHeight: 120,
+          expandedHeight: MediaQuery.of(context).size.height * 0.15, // Responsive height
           floating: false,
           pinned: true,
           backgroundColor: AppTheme.primaryBlue,
+          elevation: 0,
           flexibleSpace: FlexibleSpaceBar(
             title: const Text(
               'TrustCard',
@@ -110,8 +116,8 @@ class _HomeScreenState extends State<HomeScreen> {
         // Welcome Section
         SliverToBoxAdapter(
           child: Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(20),
+            margin: ResponsiveHelper.getResponsiveMargin(context),
+            padding: ResponsiveHelper.getResponsivePadding(context),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
@@ -148,40 +154,45 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => context.push('/scan'),
-                        icon: const Icon(Icons.qr_code_scanner, size: 20),
-                        label: const Text('Scan Card'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: AppTheme.primaryBlue,
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isSmallScreen = constraints.maxWidth < 400;
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => context.push('/scan'),
+                            icon: Icon(Icons.qr_code_scanner, size: isSmallScreen ? 16 : 20),
+                            label: Text(isSmallScreen ? 'Scan' : 'Scan Card'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: AppTheme.primaryBlue,
+                              padding: ResponsiveHelper.getResponsiveButtonPadding(context),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => context.push('/create-card'),
-                        icon: const Icon(Icons.add, size: 20),
-                        label: const Text('Create Card'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: Colors.white, width: 1.5),
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                        SizedBox(width: isSmallScreen ? 8 : 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => context.push('/create-card'),
+                            icon: Icon(Icons.add, size: isSmallScreen ? 16 : 20),
+                            label: Text(isSmallScreen ? 'Create' : 'Create Card'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              side: const BorderSide(color: Colors.white, width: 1.5),
+                              padding: ResponsiveHelper.getResponsiveButtonPadding(context),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  ],
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -191,7 +202,10 @@ class _HomeScreenState extends State<HomeScreen> {
         // My Cards Section
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: ResponsiveHelper.getResponsivePadding(context).copyWith(
+              top: 0,
+              bottom: 0,
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -216,8 +230,8 @@ class _HomeScreenState extends State<HomeScreen> {
         if (cardProvider.cards.isEmpty)
           SliverToBoxAdapter(
             child: Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(32),
+              margin: ResponsiveHelper.getResponsiveMargin(context),
+              padding: ResponsiveHelper.getResponsivePadding(context),
               decoration: BoxDecoration(
                 color: Colors.grey[50],
                 borderRadius: BorderRadius.circular(16),
@@ -349,7 +363,15 @@ class _HomeScreenState extends State<HomeScreen> {
               childCount: cardProvider.scannedCards.length,
             ),
           ),
-      ],
+
+        // Bottom padding to ensure content doesn't get cut off
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: MediaQuery.of(context).padding.bottom + 100, // Extra space for FAB
+          ),
+        ),
+        ],
+      ),
     );
   }
 
