@@ -3,21 +3,23 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>679402705269-6km9m2dc2ft43ap23ndvi202agtd2efd.apps.googleusercontent.com</string>
+	<string>818303002429-gvfvp0hfidsornlvgm2676r74aicgd17.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.679402705269-6km9m2dc2ft43ap23ndvi202agtd2efd</string>
+	<string>com.googleusercontent.apps.818303002429-gvfvp0hfidsornlvgm2676r74aicgd17</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>818303002429-9gunorf0r7f5nb4gjru9f0fhvfh5d6u3.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
-	<string>AIzaSyBZfH5vi1KNM_LIs8g-s-GcLMgmHJrqr_A</string>
+	<string>AIzaSyCkHqD483HBZQIxUfFODnmQqwGDzwR2j1I</string>
 	<key>GCM_SENDER_ID</key>
-	<string>679402705269</string>
+	<string>818303002429</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.accexasia.trustcard</string>
+	<string>com.accexasia.TrustCard</string>
 	<key>PROJECT_ID</key>
-	<string>trustcard-1e232</string>
+	<string>trustcard-aee4a</string>
 	<key>STORAGE_BUCKET</key>
-	<string>trustcard-1e232.firebasestorage.app</string>
+	<string>trustcard-aee4a.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -29,6 +31,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:679402705269:ios:ba08437ce0cdddb91c033c</string>
+	<string>1:818303002429:ios:df5ce41870afd64cb88754</string>
 </dict>
 </plist>
