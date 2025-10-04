@@ -207,7 +207,7 @@ class ProfileScreen extends StatelessWidget {
                     'My Cards',
                     'View and manage your digital cards',
                     Icons.credit_card,
-                    () => context.push('/'),
+                    () => context.push('/my-cards'),
                   ),
                   _buildMenuItem(
                     context,

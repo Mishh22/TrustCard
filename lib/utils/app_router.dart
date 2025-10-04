@@ -14,6 +14,7 @@ import '../screens/activity_feed_screen.dart';
 import '../screens/company_admin_screen.dart';
 import '../screens/company_employee_management_screen.dart';
 import '../screens/settings_screen.dart';
+import '../screens/my_cards_screen.dart';
 import '../providers/auth_provider.dart';
 
 class AppRouter {
@@ -112,6 +113,11 @@ class AppRouter {
         path: '/settings',
         name: 'settings',
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/my-cards',
+        name: 'my-cards',
+        builder: (context, state) => const MyCardsScreen(),
       ),
     ],
   );

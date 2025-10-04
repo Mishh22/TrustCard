@@ -9,14 +9,12 @@ class DigitalCardWidget extends StatelessWidget {
   final UserCard card;
   final bool showQR;
   final bool isCompact;
-  final bool showDeleteOption;
 
   const DigitalCardWidget({
     Key? key,
     required this.card,
     this.showQR = false,
     this.isCompact = false,
-    this.showDeleteOption = false,
   }) : super(key: key);
 
   @override
@@ -123,33 +121,8 @@ class DigitalCardWidget extends StatelessWidget {
           ],
         ),
         
-        // Right side actions
-        Row(
-          children: [
-            // Verification Badge
-            _buildVerificationBadge(),
-            
-            // Delete button (if enabled)
-            if (showDeleteOption) ...[
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: () => _showDeleteConfirmation(context),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.delete_outline,
-                    color: Colors.red,
-                    size: 20,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
+        // Verification Badge
+        _buildVerificationBadge(),
       ],
     );
   }
@@ -604,74 +577,6 @@ class DigitalCardWidget extends StatelessWidget {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
-  }
-
-  void _showDeleteConfirmation(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Card'),
-        content: Text(
-          'Are you sure you want to delete "${card.fullName}" card? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(context).pop();
-              
-              // Show loading
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (context) => const Center(
-                  child: CircularProgressIndicator(),
-                ),
-              );
-
-              try {
-                final cardProvider = Provider.of<CardProvider>(context, listen: false);
-                final success = await cardProvider.deleteCard(card.id);
-                
-                Navigator.of(context).pop(); // Close loading dialog
-                
-                if (success) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Card "${card.fullName}" deleted successfully'),
-                      backgroundColor: AppTheme.verifiedGreen,
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to delete card: ${cardProvider.error ?? "Unknown error"}'),
-                      backgroundColor: AppTheme.error,
-                    ),
-                  );
-                }
-              } catch (e) {
-                Navigator.of(context).pop(); // Close loading dialog
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Error deleting card: ${e.toString()}'),
-                    backgroundColor: AppTheme.error,
-                  ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.error,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
   }
 }
 
