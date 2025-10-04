@@ -282,6 +282,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     card: card,
                     showQR: false,
                     isCompact: true,
+                    showDeleteOption: true,
                   ),
                 );
               },

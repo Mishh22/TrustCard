@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../providers/auth_provider.dart';
 import '../providers/card_provider.dart';
 import '../models/user_card.dart';
 import '../utils/app_theme.dart';
+import '../services/firebase_service.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -58,13 +61,21 @@ class ProfileScreen extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          CircleAvatar(
-                            radius: 40,
-                            backgroundColor: Colors.white.withOpacity(0.2),
-                            child: const Icon(
-                              Icons.person,
-                              size: 40,
-                              color: Colors.white,
+                          GestureDetector(
+                            onTap: () => _showImagePickerDialog(context, authProvider),
+                            child: CircleAvatar(
+                              radius: 40,
+                              backgroundColor: Colors.white.withOpacity(0.2),
+                              backgroundImage: authProvider.currentUser?.profilePhotoUrl != null
+                                  ? NetworkImage(authProvider.currentUser!.profilePhotoUrl!)
+                                  : null,
+                              child: authProvider.currentUser?.profilePhotoUrl == null
+                                  ? const Icon(
+                                      Icons.person,
+                                      size: 40,
+                                      color: Colors.white,
+                                    )
+                                  : null,
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -72,13 +83,34 @@ class ProfileScreen extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  authProvider.currentUser?.fullName ?? 'User',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        authProvider.currentUser?.fullName ?? 'User',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    GestureDetector(
+                                      onTap: () => _showEditProfileDialog(context, authProvider),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: const Icon(
+                                          Icons.edit,
+                                          color: Colors.white,
+                                          size: 20,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
@@ -404,6 +436,229 @@ class ProfileScreen extends StatelessWidget {
         const Text('• Multi-level verification'),
         const Text('• Trust scoring system'),
       ],
+    );
+  }
+
+  void _showImagePickerDialog(BuildContext context, AuthProvider authProvider) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Take Photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(context, authProvider, ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Choose from Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(context, authProvider, ImageSource.gallery);
+              },
+            ),
+            if (authProvider.currentUser?.profilePhotoUrl != null)
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Remove Photo', style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _removeProfilePhoto(context, authProvider);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImage(BuildContext context, AuthProvider authProvider, ImageSource source) async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        // Show loading dialog
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: CircularProgressIndicator(),
+          ),
+        );
+
+        try {
+          // Upload to Firebase Storage
+          final File imageFile = File(image.path);
+          final String fileName = 'profile_${authProvider.currentUser?.id}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          final String? downloadUrl = await FirebaseService.uploadFile(imageFile, 'profile_photos/$fileName');
+
+          if (downloadUrl != null) {
+            // Update user profile
+            await authProvider.updateProfile(profilePhotoUrl: downloadUrl);
+            
+            // Close loading dialog
+            Navigator.pop(context);
+            
+            // Show success message
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Profile photo updated successfully!'),
+                backgroundColor: AppTheme.verifiedGreen,
+              ),
+            );
+          } else {
+            Navigator.pop(context);
+            _showErrorSnackBar(context, 'Failed to upload image. Please try again.');
+          }
+        } catch (e) {
+          Navigator.pop(context);
+          _showErrorSnackBar(context, 'Error uploading image: ${e.toString()}');
+        }
+      }
+    } catch (e) {
+      _showErrorSnackBar(context, 'Error picking image: ${e.toString()}');
+    }
+  }
+
+  Future<void> _removeProfilePhoto(BuildContext context, AuthProvider authProvider) async {
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      // Update user profile to remove photo
+      await authProvider.updateProfile(profilePhotoUrl: '');
+      
+      // Close loading dialog
+      Navigator.pop(context);
+      
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile photo removed successfully!'),
+          backgroundColor: AppTheme.verifiedGreen,
+        ),
+      );
+    } catch (e) {
+      Navigator.pop(context);
+      _showErrorSnackBar(context, 'Error removing photo: ${e.toString()}');
+    }
+  }
+
+  void _showEditProfileDialog(BuildContext context, AuthProvider authProvider) {
+    final TextEditingController nameController = TextEditingController(
+      text: authProvider.currentUser?.fullName ?? '',
+    );
+    final TextEditingController companyController = TextEditingController(
+      text: authProvider.currentUser?.companyName ?? '',
+    );
+    final TextEditingController designationController = TextEditingController(
+      text: authProvider.currentUser?.designation ?? '',
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Profile'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Full Name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: companyController,
+                decoration: const InputDecoration(
+                  labelText: 'Company Name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: designationController,
+                decoration: const InputDecoration(
+                  labelText: 'Designation',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (nameController.text.trim().isEmpty) {
+                _showErrorSnackBar(context, 'Name cannot be empty');
+                return;
+              }
+
+              // Show loading
+              Navigator.pop(context);
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+
+              try {
+                await authProvider.updateProfile(
+                  fullName: nameController.text.trim(),
+                  companyName: companyController.text.trim(),
+                  designation: designationController.text.trim(),
+                );
+                
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Profile updated successfully!'),
+                    backgroundColor: AppTheme.verifiedGreen,
+                  ),
+                );
+              } catch (e) {
+                Navigator.pop(context);
+                _showErrorSnackBar(context, 'Error updating profile: ${e.toString()}');
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppTheme.error,
+      ),
     );
   }
 }
