@@ -477,7 +477,7 @@ class DigitalCardWidget extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'ID: ${card.id.substring(0, 8).toUpperCase()}',
+                  'ID: ${card.id.length >= 8 ? card.id.substring(0, 8).toUpperCase() : card.id.toUpperCase()}',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.7),
                     fontSize: 11,
