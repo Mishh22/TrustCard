@@ -59,5 +59,16 @@
 	<string>TrustCard uses Face ID for secure authentication</string>
 	<key>NSContactsUsageDescription</key>
 	<string>TrustCard needs access to contacts to share your digital ID</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.818303002429-gvfvp0hfidsornlvgm2676r74aicgd17</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

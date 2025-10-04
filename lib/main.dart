@@ -15,6 +15,7 @@ import 'utils/app_theme.dart';
 import 'utils/app_router.dart';
 import 'services/firebase_service.dart';
 import 'services/language_service.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,7 +24,9 @@ void main() async {
   print("🚀 TRUSTCARD APP STARTING - This is our TrustCard app, not the demo!");
   
   // Initialize Firebase
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   await FirebaseService.initialize();
   
   // Set preferred orientations

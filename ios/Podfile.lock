@@ -1315,17 +1315,6 @@ PODS:
     - AppCheckCore (~> 11.0)
     - GTMAppAuth (< 5.0, >= 4.1.1)
     - GTMSessionFetcher/Core (~> 3.3)
-  - GoogleUtilities (8.1.0):
-    - GoogleUtilities/AppDelegateSwizzler (= 8.1.0)
-    - GoogleUtilities/Environment (= 8.1.0)
-    - GoogleUtilities/Logger (= 8.1.0)
-    - GoogleUtilities/MethodSwizzler (= 8.1.0)
-    - GoogleUtilities/Network (= 8.1.0)
-    - "GoogleUtilities/NSData+zlib (= 8.1.0)"
-    - GoogleUtilities/Privacy (= 8.1.0)
-    - GoogleUtilities/Reachability (= 8.1.0)
-    - GoogleUtilities/SwizzlerTestHelpers (= 8.1.0)
-    - GoogleUtilities/UserDefaults (= 8.1.0)
   - GoogleUtilities/AppDelegateSwizzler (8.1.0):
     - GoogleUtilities/Environment
     - GoogleUtilities/Logger
@@ -1335,9 +1324,6 @@ PODS:
     - GoogleUtilities/Privacy
   - GoogleUtilities/Logger (8.1.0):
     - GoogleUtilities/Environment
-    - GoogleUtilities/Privacy
-  - GoogleUtilities/MethodSwizzler (8.1.0):
-    - GoogleUtilities/Logger
     - GoogleUtilities/Privacy
   - GoogleUtilities/Network (8.1.0):
     - GoogleUtilities/Logger
@@ -1350,8 +1336,6 @@ PODS:
   - GoogleUtilities/Reachability (8.1.0):
     - GoogleUtilities/Logger
     - GoogleUtilities/Privacy
-  - GoogleUtilities/SwizzlerTestHelpers (8.1.0):
-    - GoogleUtilities/MethodSwizzler
   - GoogleUtilities/UserDefaults (8.1.0):
     - GoogleUtilities/Logger
     - GoogleUtilities/Privacy
@@ -1491,8 +1475,6 @@ DEPENDENCIES:
   - firebase_storage (from `.symlinks/plugins/firebase_storage/ios`)
   - Flutter (from `Flutter`)
   - google_sign_in_ios (from `.symlinks/plugins/google_sign_in_ios/darwin`)
-  - GoogleDataTransport (~> 10.1.0)
-  - GoogleUtilities (~> 8.1.0)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
   - mobile_scanner (from `.symlinks/plugins/mobile_scanner/darwin`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
@@ -1609,6 +1591,6 @@ SPEC CHECKSUMS:
   sign_in_with_apple: c5dcc141574c8c54d5ac99dd2163c0c72ad22418
   sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
 
-PODFILE CHECKSUM: 3434bd31ff05f230068bea00f9669446c0b6c37b
+PODFILE CHECKSUM: 798e5b6f7254a74057b7dc2e7fc43ef489069335
 
 COCOAPODS: 1.16.2
