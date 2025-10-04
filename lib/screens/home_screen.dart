@@ -278,10 +278,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     right: 16,
                     bottom: index == cardProvider.cards.length - 1 ? 16 : 8,
                   ),
-                  child: DigitalCardWidget(
-                    card: card,
-                    showQR: false,
-                    isCompact: true,
+                  child: GestureDetector(
+                    onTap: () => context.push('/card-detail/${card.id}'),
+                    child: DigitalCardWidget(
+                      card: card,
+                      showQR: false,
+                      isCompact: true,
+                    ),
                   ),
                 );
               },

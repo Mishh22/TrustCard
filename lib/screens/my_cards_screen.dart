@@ -115,10 +115,13 @@ class _MyCardsScreenState extends State<MyCardsScreen> {
           child: Stack(
             children: [
               // Card Widget
-              DigitalCardWidget(
-                card: card,
-                showQR: false,
-                isCompact: false,
+              GestureDetector(
+                onTap: () => context.push('/card-detail/${card.id}'),
+                child: DigitalCardWidget(
+                  card: card,
+                  showQR: false,
+                  isCompact: false,
+                ),
               ),
               
               // Delete Button (positioned on top-right)
