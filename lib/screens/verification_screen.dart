@@ -45,11 +45,6 @@ class _VerificationScreenState extends State<VerificationScreen> {
                 
                 // Trust Score
                 _buildTrustScore(user),
-                
-                const SizedBox(height: 24),
-                
-                // Action Buttons
-                _buildActionButtons(),
               ],
             ),
           );
@@ -110,7 +105,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    '${(user.trustScore * 100).toInt()}%',
+                    '${user.trustScore.toInt()}%',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -164,14 +159,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
           'Upload company ID, offer letter, or salary slip',
         ),
         
-        _buildVerificationLevelCard(
-          'Peer Verification',
-          'Verified by colleagues',
-          Icons.people,
-          AppTheme.verifiedBlue,
-          VerificationLevel.peer,
-          'Get verified by 2+ colleagues from same company',
-        ),
+        _buildPeerVerificationCard(),
         
         _buildVerificationLevelCard(
           'Company Verification',
@@ -196,62 +184,76 @@ class _VerificationScreenState extends State<VerificationScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: () => _handleVerificationLevelTap(level),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: color, size: 24),
                 ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[600],
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        description,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        level.name.toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      description,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey[500],
-                      ),
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      color: color,
+                      size: 16,
                     ),
                   ],
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  level.name.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -280,7 +282,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${(user.trustScore * 100).toInt()}%',
+                        '${user.trustScore.toInt()}%',
                         style: Theme.of(context).textTheme.displayMedium?.copyWith(
                           color: AppTheme.getTrustScoreColor(user.trustScore),
                           fontWeight: FontWeight.bold,
@@ -288,7 +290,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                       ),
                       const SizedBox(height: 8),
                       LinearProgressIndicator(
-                        value: user.trustScore,
+                        value: user.trustScore / 100.0,
                         backgroundColor: Colors.grey[200],
                         valueColor: AlwaysStoppedAnimation<Color>(
                           AppTheme.getTrustScoreColor(user.trustScore),
@@ -327,62 +329,113 @@ class _VerificationScreenState extends State<VerificationScreen> {
     );
   }
 
-  Widget _buildActionButtons() {
-    return Column(
-      children: [
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () => context.push('/document-upload'),
-            icon: const Icon(Icons.upload_file),
-            label: const Text('Upload Documents'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.verifiedGreen,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-          ),
-        ),
-        
-        const SizedBox(height: 12),
-        
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () => context.push('/colleague-verification'),
-            icon: const Icon(Icons.people),
-            label: const Text('Get Colleague Verification'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppTheme.verifiedBlue,
-              side: const BorderSide(color: AppTheme.verifiedBlue),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-          ),
-        ),
-        
-        const SizedBox(height: 12),
-        
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Company verification coming soon!'),
+  Widget _buildPeerVerificationCard() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        child: InkWell(
+          onTap: () => context.push('/colleague-verification'),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.verifiedBlue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.people, color: AppTheme.verifiedBlue, size: 24),
                 ),
-              );
-            },
-            icon: const Icon(Icons.business),
-            label: const Text('Request Company Verification'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppTheme.verifiedGold,
-              side: const BorderSide(color: AppTheme.verifiedGold),
-              padding: const EdgeInsets.symmetric(vertical: 16),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Peer Verification',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Verified by colleagues',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Get verified by 2+ colleagues from same company',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.verifiedBlue,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'PEER',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      color: AppTheme.verifiedBlue,
+                      size: 16,
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),
-      ],
+      ),
     );
+  }
+
+  void _handleVerificationLevelTap(VerificationLevel level) {
+    switch (level) {
+      case VerificationLevel.basic:
+        // Basic verification is already complete - no action needed
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Basic verification is already complete!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        break;
+      
+      case VerificationLevel.document:
+        // Navigate to document upload for document verification
+        context.push('/document-upload');
+        break;
+      
+      case VerificationLevel.peer:
+        // Navigate to colleague verification for peer verification
+        context.push('/colleague-verification');
+        break;
+      
+      case VerificationLevel.company:
+        // Navigate to card verification request screen
+        context.push('/card-verification-request');
+        break;
+    }
   }
 
   String _getStatusDescription(UserCard user) {
@@ -403,11 +456,11 @@ class _VerificationScreenState extends State<VerificationScreen> {
   }
 
   String _getTrustScoreDescription(double score) {
-    if (score >= 0.8) {
+    if (score >= 80) {
       return 'Excellent! You have a high trust score. Customers will trust your identity.';
-    } else if (score >= 0.6) {
+    } else if (score >= 60) {
       return 'Good trust score. Consider uploading more documents to increase it further.';
-    } else if (score >= 0.4) {
+    } else if (score >= 40) {
       return 'Fair trust score. Upload documents and get colleague verification to improve.';
     } else {
       return 'Low trust score. Start by uploading documents to build trust.';
@@ -415,9 +468,9 @@ class _VerificationScreenState extends State<VerificationScreen> {
   }
 
   IconData _getTrustScoreIcon(double score) {
-    if (score >= 0.8) return Icons.star;
-    if (score >= 0.6) return Icons.thumb_up;
-    if (score >= 0.4) return Icons.check_circle;
+    if (score >= 80) return Icons.star;
+    if (score >= 60) return Icons.thumb_up;
+    if (score >= 40) return Icons.check_circle;
     return Icons.warning;
   }
 }

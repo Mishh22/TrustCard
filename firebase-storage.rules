@@ -1,0 +1,43 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // User documents for card verification
+    match /users/{userId}/cards/{cardId}/documents/{documentId}/{filename} {
+      // Users can only read/write their own documents
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null 
+                   && request.auth.uid == userId
+                   && request.resource.size < 10 * 1024 * 1024;  // 10MB max (for PDFs and images)
+    }
+    
+    // Verification documents - strict security (legacy path, keeping for compatibility)
+    match /verification-docs/{documentId}/{filename} {
+      // Only authenticated users can read/write
+      allow read: if request.auth != null;
+      allow write: if request.auth != null 
+                   && request.resource.size < 5 * 1024 * 1024;  // 5MB max
+    }
+    
+    // Profile photos - less strict
+    match /profile-photos/{userId}/{filename} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null 
+                   && request.auth.uid == userId
+                   && request.resource.size < 2 * 1024 * 1024  // 2MB max
+                   && request.resource.contentType.matches('image/.*');
+    }
+    
+    // Company verification documents
+    match /company_verification/{filename} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null 
+                   && request.resource.size < 10 * 1024 * 1024;  // 10MB max for PDFs and images
+    }
+    
+    // Deny all other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

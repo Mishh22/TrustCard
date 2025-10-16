@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'logger.dart';
 import '../screens/auth_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/create_card_screen.dart';
@@ -10,11 +11,24 @@ import '../screens/verification_screen.dart';
 import '../screens/card_detail_screen.dart';
 import '../screens/document_upload_screen.dart';
 import '../screens/colleague_verification_screen.dart';
+import '../screens/pending_verification_screen.dart';
 import '../screens/activity_feed_screen.dart';
 import '../screens/company_admin_screen.dart';
 import '../screens/company_employee_management_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/my_cards_screen.dart';
+// Removed admin verification - app is user-driven
+import '../screens/company_verification_screen.dart';
+import '../screens/email_verification_screen.dart';
+import '../screens/notification_center_screen.dart';
+import '../screens/help_center_screen.dart';
+import '../screens/report_issue_screen.dart';
+import '../screens/about_screen.dart';
+import '../screens/privacy_policy_screen.dart';
+import '../screens/terms_conditions_screen.dart';
+import '../screens/scan_history_screen.dart';
+import '../screens/card_verification_request_screen.dart';
+import '../screens/simple_otp_test_screen.dart';
 import '../providers/auth_provider.dart';
 
 class AppRouter {
@@ -33,12 +47,61 @@ class AppRouter {
       }
       return null;
     },
+    errorBuilder: (context, state) {
+      // Handle unknown routes gracefully (e.g., Firebase reCAPTCHA redirects)
+      Logger.debug('Navigation error: ${state.uri.path}');
+      
+      // If it's a Firebase redirect (like /link), just show a loading screen
+      // The OTP is already being sent in the background
+      if (state.uri.path == '/link' || state.uri.path.contains('__/auth')) {
+        return Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Verifying...', style: TextStyle(fontSize: 18)),
+              ],
+            ),
+          ),
+        );
+      }
+      
+      // For other unknown routes, show error page
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.grey),
+              const SizedBox(height: 16),
+              const Text('Page not found', style: TextStyle(fontSize: 18)),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () {
+                  context.go(authProvider.isAuthenticated ? '/' : '/auth');
+                },
+                child: const Text('Go Back'),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
     routes: [
       // Auth Screen
       GoRoute(
         path: '/auth',
         name: 'auth',
         builder: (context, state) => const AuthScreen(),
+      ),
+      // Simple OTP Test Screen
+      GoRoute(
+        path: '/otp-test',
+        name: 'otp-test',
+        builder: (context, state) => const SimpleOTPTestScreen(),
       ),
       
       // Main navigation shell
@@ -92,6 +155,11 @@ class AppRouter {
         builder: (context, state) => const ColleagueVerificationScreen(),
       ),
       GoRoute(
+        path: '/pending-verification',
+        name: 'pending-verification',
+        builder: (context, state) => const PendingVerificationScreen(),
+      ),
+      GoRoute(
         path: '/card-detail/:cardId',
         name: 'card-detail',
         builder: (context, state) {
@@ -119,6 +187,65 @@ class AppRouter {
         name: 'my-cards',
         builder: (context, state) => const MyCardsScreen(),
       ),
+      GoRoute(
+        path: '/company-verification',
+        name: 'company-verification',
+        builder: (context, state) => const CompanyVerificationScreen(),
+      ),
+      GoRoute(
+        path: '/email-verification',
+        name: 'email-verification',
+        builder: (context, state) => const EmailVerificationScreen(),
+      ),
+      GoRoute(
+        path: '/notifications',
+        name: 'notifications',
+        builder: (context, state) => const NotificationCenterScreen(),
+      ),
+      GoRoute(
+        path: '/help-center',
+        name: 'help-center',
+        builder: (context, state) => const HelpCenterScreen(),
+      ),
+      GoRoute(
+        path: '/report-issue',
+        name: 'report-issue',
+        builder: (context, state) => const ReportIssueScreen(),
+      ),
+      GoRoute(
+        path: '/about',
+        name: 'about',
+        builder: (context, state) => const AboutScreen(),
+      ),
+      GoRoute(
+        path: '/privacy-policy',
+        name: 'privacy-policy',
+        builder: (context, state) => const PrivacyPolicyScreen(),
+      ),
+      GoRoute(
+        path: '/terms-conditions',
+        name: 'terms-conditions',
+        builder: (context, state) => const TermsConditionsScreen(),
+      ),
+      GoRoute(
+        path: '/scan-history',
+        name: 'scan-history',
+        builder: (context, state) => const ScanHistoryScreen(),
+      ),
+      GoRoute(
+        path: '/scan-history/:cardId',
+        name: 'scan-history-card',
+        builder: (context, state) {
+          final cardId = state.pathParameters['cardId']!;
+          return ScanHistoryScreen(cardId: cardId);
+        },
+      ),
+      GoRoute(
+        path: '/card-verification-request',
+        name: 'card-verification-request',
+        builder: (context, state) => const CardVerificationRequestScreen(),
+      ),
+      // Removed admin verification route - app is user-driven
     ],
   );
 }

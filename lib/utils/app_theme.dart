@@ -53,7 +53,7 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         elevation: 2,
-        shadowColor: Colors.black.withOpacity(0.1),
+        shadowColor: Colors.black.withValues(alpha: 0.1),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
@@ -63,7 +63,7 @@ class AppTheme {
           backgroundColor: primaryBlue,
           foregroundColor: Colors.white,
           elevation: 2,
-          shadowColor: primaryBlue.withOpacity(0.3),
+          shadowColor: primaryBlue.withValues(alpha: 0.3),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -226,7 +226,7 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         elevation: 4,
-        shadowColor: Colors.black.withOpacity(0.3),
+        shadowColor: Colors.black.withValues(alpha: 0.3),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
@@ -236,7 +236,7 @@ class AppTheme {
           backgroundColor: primaryBlue,
           foregroundColor: Colors.white,
           elevation: 2,
-          shadowColor: primaryBlue.withOpacity(0.3),
+          shadowColor: primaryBlue.withValues(alpha: 0.3),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -273,11 +273,11 @@ class AppTheme {
     }
   }
 
-  // Trust score colors
+  // Trust score colors (0-100 scale)
   static Color getTrustScoreColor(double score) {
-    if (score >= 0.8) return verifiedGreen;
-    if (score >= 0.6) return verifiedBlue;
-    if (score >= 0.4) return verifiedYellow;
+    if (score >= 80) return verifiedGreen;
+    if (score >= 60) return verifiedBlue;
+    if (score >= 40) return verifiedYellow;
     return verifiedRed;
   }
 

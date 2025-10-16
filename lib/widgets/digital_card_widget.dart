@@ -26,7 +26,7 @@ class DigitalCardWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -100,7 +100,7 @@ class DigitalCardWidget extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(
@@ -253,7 +253,7 @@ class DigitalCardWidget extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      _maskPhoneNumber(card.phoneNumber),
+                      card.phoneNumber, // Show full phone number
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.8),
                         fontSize: 13,
@@ -545,6 +545,17 @@ class DigitalCardWidget extends StatelessWidget {
           Color(0xFF059669), // Green
         ],
       );
+    } else if (card.verificationLevel == VerificationLevel.peer) {
+      // Blue gradient for peer verified
+      return const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFF1E40AF), // Dark blue
+          Color(0xFF3B82F6), // Blue
+          Color(0xFF2563EB), // Blue
+        ],
+      );
     } else {
       // Default gradient for basic verified
       return const LinearGradient(
@@ -559,10 +570,12 @@ class DigitalCardWidget extends StatelessWidget {
     }
   }
 
-  String _maskPhoneNumber(String phone) {
-    if (phone.length <= 4) return phone;
-    return '${phone.substring(0, phone.length - 4).replaceAll(RegExp(r'\d'), 'X')}${phone.substring(phone.length - 4)}';
-  }
+  // Phone masking disabled - showing full number
+  // Uncomment below if you want to mask phone numbers for privacy
+  // String _maskPhoneNumber(String phone) {
+  //   if (phone.length <= 4) return phone;
+  //   return '${phone.substring(0, phone.length - 4).replaceAll(RegExp(r'\d'), 'X')}${phone.substring(phone.length - 4)}';
+  // }
 
   String _getActiveSinceText() {
     final duration = DateTime.now().difference(card.createdAt);

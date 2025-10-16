@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/auth_provider.dart';
 import '../providers/card_provider.dart';
 import '../widgets/digital_card_widget.dart';
@@ -51,13 +52,6 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/create-card'),
-        icon: const Icon(Icons.add),
-        label: const Text('Create Card'),
-        backgroundColor: AppTheme.primaryBlue,
-        foregroundColor: Colors.white,
-      ),
     );
   }
 
@@ -74,6 +68,10 @@ class _HomeScreenState extends State<HomeScreen> {
           pinned: true,
           backgroundColor: AppTheme.primaryBlue,
           elevation: 0,
+          actions: [
+            _buildCompanyAdminButton(context),
+            _buildNotificationButton(context),
+          ],
           flexibleSpace: FlexibleSpaceBar(
             title: const Text(
               'TrustCard',
@@ -95,22 +93,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.business),
-              onPressed: () => context.push('/company-admin'),
-              tooltip: 'Company Admin',
-            ),
-            IconButton(
-              icon: const Icon(Icons.notifications_outlined),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const NotificationCenterScreen(),
-                ),
-              ),
-            ),
-          ],
         ),
 
         // Welcome Section
@@ -130,7 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.primaryBlue.withOpacity(0.3),
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.3),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -150,7 +132,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text(
                   'Your digital identity is secure and verified',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -416,4 +398,98 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  Widget _buildCompanyAdminButton(BuildContext context) {
+    final authProvider = context.read<AuthProvider>();
+    final currentUser = authProvider.currentUser;
+    
+    return Stack(
+      children: [
+        IconButton(
+          icon: Icon(
+            currentUser?.isCompanyVerified == true 
+                ? Icons.business 
+                : Icons.business_outlined,
+            color: Colors.white,
+          ),
+          onPressed: () {
+            if (currentUser?.isCompanyVerified == true) {
+              // User is verified, go to company admin dashboard
+              context.push('/company-admin');
+            } else {
+              // User is not verified, go to verification request form
+              context.push('/company-verification');
+            }
+          },
+          tooltip: currentUser?.isCompanyVerified == true 
+              ? 'Company Admin (Verified)' 
+              : 'Company Verification (Pending)',
+        ),
+        if (currentUser?.isCompanyVerified == true)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Colors.green,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildNotificationButton(BuildContext context) {
+    final currentUser = context.read<AuthProvider>().currentUser;
+    if (currentUser == null) return const SizedBox.shrink();
+    
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('user_notifications')
+          .where('userId', isEqualTo: currentUser.id)
+          .where('read', isEqualTo: false)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final unreadCount = snapshot.data?.docs.length ?? 0;
+        
+        return Stack(
+          children: [
+            IconButton(
+              onPressed: () => context.push('/notifications'),
+              icon: const Icon(Icons.notifications, color: Colors.white),
+            ),
+            if (unreadCount > 0)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 16,
+                    minHeight: 16,
+                  ),
+                  child: Text(
+                    unreadCount > 99 ? '99+' : unreadCount.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
 }

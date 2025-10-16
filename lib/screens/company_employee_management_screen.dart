@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/card_provider.dart';
+import '../providers/auth_provider.dart';
 import '../models/user_card.dart';
+import '../models/employee.dart';
+import '../services/employee_service.dart';
+import '../services/employee_invitation_service.dart';
 import '../utils/app_theme.dart';
 
 class CompanyEmployeeManagementScreen extends StatefulWidget {
@@ -13,15 +17,112 @@ class CompanyEmployeeManagementScreen extends StatefulWidget {
 }
 
 class _CompanyEmployeeManagementScreenState extends State<CompanyEmployeeManagementScreen> {
-  final List<EmployeeData> _employees = [];
+  List<Employee> _employees = [];
   bool _isUploading = false;
+  bool _isLoading = true;
+  String? _companyId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCompanyData();
+  }
+
+  Future<void> _loadCompanyData() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final currentUser = authProvider.currentUser;
+    
+    print('🔄 Loading company data...');
+    print('🔄 Current user: ${currentUser?.fullName}');
+    print('🔄 Is company verified: ${currentUser?.isCompanyVerified}');
+    print('🔄 Company ID: ${currentUser?.companyId}');
+    
+    if (currentUser != null && currentUser.isCompanyVerified) {
+      setState(() {
+        _companyId = currentUser.companyId;
+      });
+      print('✅ Company verified, loading employees...');
+      _loadEmployees();
+    } else {
+      print('❌ Company not verified or user not found');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadEmployees() async {
+    if (_companyId == null) {
+      print('❌ Company ID is null - cannot load employees');
+      return;
+    }
+
+    print('🔄 Loading employees for company: $_companyId');
+    try {
+      final employees = await EmployeeService.getCompanyEmployees(_companyId!);
+      print('🔄 Found ${employees.length} employees');
+      for (var emp in employees) {
+        print('  - ${emp.fullName} (${emp.employeeId})');
+      }
+      
+      if (mounted) {
+        setState(() {
+          _employees = employees;
+          _isLoading = false;
+        });
+        print('✅ Employee list updated in UI');
+      }
+    } catch (e) {
+      print('❌ Error loading employees: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  // Helper method to format date
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+    
+    if (difference.inDays == 0) {
+      // Today
+      return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } else if (difference.inDays == 1) {
+      // Yesterday
+      return 'Yesterday at ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } else if (difference.inDays < 7) {
+      // This week
+      final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return '${weekdays[date.weekday - 1]} at ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } else {
+      // Older
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${months[date.month - 1]} ${date.day} at ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    print('🔄 BUILD: isLoading=$_isLoading, employees=${_employees.length}');
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Employee Management'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadEmployees,
+          ),
           IconButton(
             icon: const Icon(Icons.upload_file),
             onPressed: _showUploadOptions,
@@ -84,7 +185,9 @@ class _CompanyEmployeeManagementScreenState extends State<CompanyEmployeeManagem
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Swiggy Employee Management',
+                  Provider.of<AuthProvider>(context, listen: false).currentUser?.companyName != null
+                      ? '${Provider.of<AuthProvider>(context, listen: false).currentUser!.companyName} - Employee Management'
+                      : 'Employee Management',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -192,6 +295,50 @@ class _CompanyEmployeeManagementScreenState extends State<CompanyEmployeeManagem
                 Text(employee.phoneNumber),
                 if (employee.employeeId != null)
                   Text('ID: ${employee.employeeId}'),
+                if (employee.invitationSentAt != null)
+                  Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: employee.invitationStatus == 'sent' 
+                          ? Colors.orange.withOpacity(0.1)
+                          : Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: employee.invitationStatus == 'sent' 
+                            ? Colors.orange
+                            : Colors.green,
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          employee.invitationStatus == 'sent' 
+                              ? Icons.schedule
+                              : Icons.check_circle,
+                          size: 12,
+                          color: employee.invitationStatus == 'sent' 
+                              ? Colors.orange
+                              : Colors.green,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          employee.invitationStatus == 'sent' 
+                              ? 'Invitation sent on ${_formatDate(employee.invitationSentAt!)}'
+                              : 'Invitation accepted on ${_formatDate(employee.invitationSentAt!)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: employee.invitationStatus == 'sent' 
+                                ? Colors.orange[700]
+                                : Colors.green[700],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
             trailing: PopupMenuButton(
@@ -236,13 +383,50 @@ class _CompanyEmployeeManagementScreenState extends State<CompanyEmployeeManagem
   }
 
   void _addEmployee() {
+    if (_companyId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: Company ID not found'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (context) => _EmployeeFormDialog(
-        onSave: (employee) {
-          setState(() {
-            _employees.add(employee);
-          });
+        companyId: _companyId!,
+        onSave: (employee) async {
+          print('🔄 SAVING EMPLOYEE: ${employee.fullName}');
+          print('🔄 Company ID: ${employee.companyId}');
+          print('🔄 Employee ID: ${employee.employeeId}');
+          
+          final success = await EmployeeService.addEmployee(employee);
+          print('🔄 Save result: $success');
+          
+          if (success) {
+            print('🔄 Refreshing employee list...');
+            _loadEmployees();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${employee.fullName} added successfully'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            }
+          } else {
+            print('❌ FAILED TO SAVE EMPLOYEE');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Failed to add employee'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
         },
       ),
     );
@@ -297,7 +481,7 @@ class _CompanyEmployeeManagementScreenState extends State<CompanyEmployeeManagem
     );
   }
 
-  void _handleEmployeeAction(String action, EmployeeData employee) {
+  void _handleEmployeeAction(String action, Employee employee) {
     switch (action) {
       case 'edit':
         _editEmployee(employee);
@@ -311,30 +495,52 @@ class _CompanyEmployeeManagementScreenState extends State<CompanyEmployeeManagem
     }
   }
 
-  void _editEmployee(EmployeeData employee) {
+  void _editEmployee(Employee employee) {
+    if (_companyId == null) return;
+
     showDialog(
       context: context,
       builder: (context) => _EmployeeFormDialog(
+        companyId: _companyId!,
         employee: employee,
-        onSave: (updatedEmployee) {
-          setState(() {
-            final index = _employees.indexWhere((e) => e.id == employee.id);
-            if (index != -1) {
-              _employees[index] = updatedEmployee;
+        onSave: (updatedEmployee) async {
+          final success = await EmployeeService.updateEmployee(updatedEmployee);
+          if (success) {
+            _loadEmployees();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${updatedEmployee.fullName} updated successfully'),
+                  backgroundColor: Colors.green,
+                ),
+              );
             }
-          });
+          } else {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Failed to update employee'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
         },
       ),
     );
   }
 
-  void _createEmployeeCard(EmployeeData employee) {
+  void _createEmployeeCard(Employee employee) {
     // Create a UserCard for the employee
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final currentUser = authProvider.currentUser;
+
     final userCard = UserCard(
       id: 'emp_${employee.id}',
+      userId: currentUser?.id ?? 'unknown',
       fullName: employee.fullName,
       phoneNumber: employee.phoneNumber,
-      companyName: 'Swiggy',
+      companyName: currentUser?.companyName ?? 'Company',
       designation: employee.designation,
       companyId: employee.employeeId,
       verificationLevel: VerificationLevel.company,
@@ -354,23 +560,43 @@ class _CompanyEmployeeManagementScreenState extends State<CompanyEmployeeManagem
     );
   }
 
-  void _deleteEmployee(EmployeeData employee) {
+  void _deleteEmployee(Employee employee) {
+    if (_companyId == null) return;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Employee'),
-        content: Text('Are you sure you want to delete ${employee.fullName}?'),
+        content: Text('Are you sure you want to remove ${employee.fullName} from the company?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              setState(() {
-                _employees.removeWhere((e) => e.id == employee.id);
-              });
+            onPressed: () async {
               Navigator.pop(context);
+              final success = await EmployeeService.deleteEmployee(employee.id, _companyId!);
+              if (success) {
+                _loadEmployees();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('${employee.fullName} removed successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } else {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Failed to remove employee'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
@@ -381,10 +607,12 @@ class _CompanyEmployeeManagementScreenState extends State<CompanyEmployeeManagem
 }
 
 class _EmployeeFormDialog extends StatefulWidget {
-  final EmployeeData? employee;
-  final Function(EmployeeData) onSave;
+  final String companyId;
+  final Employee? employee;
+  final Function(Employee) onSave;
 
   const _EmployeeFormDialog({
+    required this.companyId,
     this.employee,
     required this.onSave,
   });
@@ -397,8 +625,6 @@ class _EmployeeFormDialogState extends State<_EmployeeFormDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _designationController = TextEditingController();
   final _employeeIdController = TextEditingController();
 
   @override
@@ -407,10 +633,17 @@ class _EmployeeFormDialogState extends State<_EmployeeFormDialog> {
     if (widget.employee != null) {
       _nameController.text = widget.employee!.fullName;
       _phoneController.text = widget.employee!.phoneNumber;
-      _emailController.text = widget.employee!.email ?? '';
-      _designationController.text = widget.employee!.designation;
       _employeeIdController.text = widget.employee!.employeeId ?? '';
     }
+  }
+  
+  void _generateEmployeeId() {
+    // Generate unique employee ID
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final employeeId = 'EMP${timestamp.toString().substring(timestamp.toString().length - 8)}';
+    setState(() {
+      _employeeIdController.text = employeeId;
+    });
   }
 
   @override
@@ -428,6 +661,7 @@ class _EmployeeFormDialogState extends State<_EmployeeFormDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Full Name',
                   border: OutlineInputBorder(),
+                  helperText: 'For admin reference only',
                 ),
                 validator: (value) => value?.isEmpty == true ? 'Name is required' : null,
               ),
@@ -437,35 +671,25 @@ class _EmployeeFormDialogState extends State<_EmployeeFormDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Phone Number',
                   border: OutlineInputBorder(),
+                  helperText: 'Employee will receive invitation SMS/WhatsApp',
                 ),
                 keyboardType: TextInputType.phone,
                 validator: (value) => value?.isEmpty == true ? 'Phone is required' : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email (Optional)',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _designationController,
-                decoration: const InputDecoration(
-                  labelText: 'Designation',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) => value?.isEmpty == true ? 'Designation is required' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
                 controller: _employeeIdController,
-                decoration: const InputDecoration(
-                  labelText: 'Employee ID (Optional)',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: 'Employee ID',
+                  border: const OutlineInputBorder(),
+                  helperText: 'Required for employee verification',
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.auto_awesome),
+                    tooltip: 'Generate Employee ID',
+                    onPressed: _generateEmployeeId,
+                  ),
                 ),
+                validator: (value) => value?.isEmpty == true ? 'Employee ID is required' : null,
               ),
             ],
           ),
@@ -484,19 +708,49 @@ class _EmployeeFormDialogState extends State<_EmployeeFormDialog> {
     );
   }
 
-  void _saveEmployee() {
+  void _saveEmployee() async {
     if (_formKey.currentState!.validate()) {
-      final employee = EmployeeData(
+      final createdAt = widget.employee?.createdAt ?? DateTime.now();
+      final expiresAt = createdAt.add(const Duration(days: 7)); // 7-day expiry
+      
+      final employee = Employee(
         id: widget.employee?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+        companyId: widget.companyId,
         fullName: _nameController.text,
         phoneNumber: _phoneController.text,
-        email: _emailController.text.isEmpty ? null : _emailController.text,
-        designation: _designationController.text,
-        employeeId: _employeeIdController.text.isEmpty ? null : _employeeIdController.text,
+        email: null, // Not collected in form
+        designation: '', // Not collected in form
+        employeeId: _employeeIdController.text,
+        createdAt: createdAt,
+        expiresAt: expiresAt,
+        isActive: true,
+        invitationSentAt: widget.employee == null ? DateTime.now() : widget.employee!.invitationSentAt,
+        invitationStatus: widget.employee == null ? 'sent' : widget.employee!.invitationStatus,
       );
       
-      widget.onSave(employee);
-      Navigator.pop(context);
+      // Send invitation for new employee BEFORE saving
+      if (widget.employee == null) {
+        final authProvider = context.read<AuthProvider>();
+        final currentUser = authProvider.currentUser;
+        
+        print('🚀 SENDING EMPLOYEE INVITATION...');
+        await EmployeeInvitationService.sendEmployeeInvitation(
+          employeeId: employee.employeeId!,
+          employeeName: employee.fullName,
+          employeePhone: employee.phoneNumber,
+          companyName: currentUser?.companyName ?? 'Company',
+          adminName: currentUser?.fullName ?? 'Admin',
+        );
+        print('✅ EMPLOYEE INVITATION SENT');
+      }
+      
+      // Save employee AFTER invitation - AWAIT the callback
+      await widget.onSave(employee);
+      
+      // Close dialog ONLY after save completes
+      if (mounted) {
+        Navigator.pop(context);
+      }
     }
   }
 
@@ -504,29 +758,8 @@ class _EmployeeFormDialogState extends State<_EmployeeFormDialog> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
-    _emailController.dispose();
-    _designationController.dispose();
     _employeeIdController.dispose();
     super.dispose();
   }
-}
 
-class EmployeeData {
-  final String id;
-  final String fullName;
-  final String phoneNumber;
-  final String? email;
-  final String designation;
-  final String? employeeId;
-  final String? profilePhoto;
-
-  EmployeeData({
-    required this.id,
-    required this.fullName,
-    required this.phoneNumber,
-    this.email,
-    required this.designation,
-    this.employeeId,
-    this.profilePhoto,
-  });
 }

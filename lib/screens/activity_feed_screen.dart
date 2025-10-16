@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/card_provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/auth_provider.dart';
 import '../utils/app_theme.dart';
 
@@ -13,6 +13,7 @@ class ActivityFeedScreen extends StatefulWidget {
 
 class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
   final List<ActivityItem> _activities = [];
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   void initState() {
@@ -162,8 +163,41 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
     );
   }
 
-  void _loadActivities() {
-    // Mock data - in real app, load from API
+  void _loadActivities() async {
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      if (authProvider.currentUser == null) return;
+
+      final snapshot = await _firestore
+          .collection('activityLogs')
+          .where('userId', isEqualTo: authProvider.currentUser!.id)
+          .orderBy('timestamp', descending: true)
+          .limit(50)
+          .get();
+
+      setState(() {
+        _activities.clear();
+        for (final doc in snapshot.docs) {
+          final data = doc.data();
+          _activities.add(ActivityItem(
+            id: doc.id,
+            type: _getActivityTypeFromString(data['type'] ?? ''),
+            title: data['title'] ?? 'Activity',
+            description: data['description'] ?? '',
+            timestamp: (data['timestamp'] as Timestamp).toDate(),
+            status: data['status'],
+            data: Map<String, dynamic>.from(data['data'] ?? {}),
+          ));
+        }
+      });
+    } catch (e) {
+      print('Error loading activities: $e');
+      // Fallback to mock data if Firebase fails
+      _loadMockActivities();
+    }
+  }
+
+  void _loadMockActivities() {
     setState(() {
       _activities.addAll([
         ActivityItem(
@@ -231,6 +265,33 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
         ),
       ]);
     });
+  }
+
+  ActivityType _getActivityTypeFromString(String type) {
+    switch (type) {
+      case 'cardView':
+        return ActivityType.cardView;
+      case 'qrScan':
+        return ActivityType.qrScan;
+      case 'verificationRequest':
+        return ActivityType.verificationRequest;
+      case 'documentUpload':
+        return ActivityType.documentUpload;
+      case 'peerVerification':
+        return ActivityType.peerVerification;
+      case 'rating':
+        return ActivityType.rating;
+      case 'cardCreated':
+        return ActivityType.cardCreated;
+      case 'login':
+        return ActivityType.login;
+      case 'logout':
+        return ActivityType.logout;
+      case 'company_verification_withdrawal':
+        return ActivityType.companyVerificationWithdrawal;
+      default:
+        return ActivityType.cardView;
+    }
   }
 
   void _showFilterDialog() {
@@ -308,6 +369,8 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
         return Icons.login;
       case ActivityType.logout:
         return Icons.logout;
+      case ActivityType.companyVerificationWithdrawal:
+        return Icons.cancel_outlined;
     }
   }
 
@@ -331,6 +394,8 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
         return Colors.green;
       case ActivityType.logout:
         return Colors.red;
+      case ActivityType.companyVerificationWithdrawal:
+        return Colors.orange;
     }
   }
 
@@ -395,4 +460,5 @@ enum ActivityType {
   cardCreated,
   login,
   logout,
+  companyVerificationWithdrawal,
 }

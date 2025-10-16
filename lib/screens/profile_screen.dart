@@ -3,11 +3,14 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../providers/auth_provider.dart';
 import '../providers/card_provider.dart';
 import '../models/user_card.dart';
+import '../models/user_profile.dart';
 import '../utils/app_theme.dart';
 import '../services/firebase_service.dart';
+import '../services/profile_service.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -25,13 +28,34 @@ class ProfileScreen extends StatelessWidget {
             return _buildErrorWidget(context, authProvider.error!);
           }
 
-          return _buildProfileContent(context, authProvider, cardProvider);
+          // Get current user ID for ProfileService
+          final userId = authProvider.currentUser?.userId ?? authProvider.currentUser?.id;
+          if (userId == null) {
+            return _buildErrorWidget(context, 'No user logged in');
+          }
+
+          // Use ProfileService stream for real-time profile updates
+          return StreamBuilder<UserProfile?>(
+            stream: ProfileService.getProfileStream(userId),
+            builder: (context, profileSnapshot) {
+              if (profileSnapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              if (profileSnapshot.hasError) {
+                return _buildErrorWidget(context, 'Error loading profile: ${profileSnapshot.error}');
+              }
+
+              final profile = profileSnapshot.data;
+              return _buildProfileContent(context, authProvider, cardProvider, profile);
+            },
+          );
         },
       ),
     );
   }
 
-  Widget _buildProfileContent(BuildContext context, AuthProvider authProvider, CardProvider cardProvider) {
+  Widget _buildProfileContent(BuildContext context, AuthProvider authProvider, CardProvider cardProvider, UserProfile? profile) {
     return CustomScrollView(
       slivers: [
         // Profile Header
@@ -66,10 +90,10 @@ class ProfileScreen extends StatelessWidget {
                             child: CircleAvatar(
                               radius: 40,
                               backgroundColor: Colors.white.withOpacity(0.2),
-                              backgroundImage: authProvider.currentUser?.profilePhotoUrl != null
-                                  ? NetworkImage(authProvider.currentUser!.profilePhotoUrl!)
+                              backgroundImage: (profile?.profilePhotoUrl ?? authProvider.currentUser?.profilePhotoUrl) != null
+                                  ? NetworkImage(profile?.profilePhotoUrl ?? authProvider.currentUser!.profilePhotoUrl!)
                                   : null,
-                              child: authProvider.currentUser?.profilePhotoUrl == null
+                              child: (profile?.profilePhotoUrl ?? authProvider.currentUser?.profilePhotoUrl) == null
                                   ? const Icon(
                                       Icons.person,
                                       size: 40,
@@ -87,7 +111,7 @@ class ProfileScreen extends StatelessWidget {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        authProvider.currentUser?.fullName ?? 'User',
+                                        profile?.fullName ?? authProvider.currentUser?.fullName ?? 'User',
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontSize: 24,
@@ -212,19 +236,26 @@ class ProfileScreen extends StatelessWidget {
                   _buildMenuItem(
                     context,
                     'Verification',
-                    'Upgrade your verification level',
+                    'Upload documents and upgrade verification level',
                     Icons.verified_user,
                     () => context.push('/verification'),
                   ),
-                  _buildMenuItem(
-                    context,
-                    'Settings',
-                    'App preferences and privacy',
-                    Icons.settings,
-                    () {
-                      // TODO: Navigate to settings
-                    },
-                  ),
+                  // Phone verification is now integrated into card creation flow
+       _buildMenuItem(
+         context,
+         'Settings',
+         'App preferences and privacy',
+         Icons.settings,
+         () => context.push('/settings'),
+       ),
+       _buildMenuItem(
+         context,
+         'Scan History',
+         'See who scanned your card',
+         Icons.history,
+         () => context.push('/scan-history'),
+       ),
+       
                 ]),
                 
                 const SizedBox(height: 24),
@@ -242,27 +273,14 @@ class ProfileScreen extends StatelessWidget {
                     'Help Center',
                     'Get help and support',
                     Icons.help_outline,
-                    () {
-                      // TODO: Navigate to help
-                    },
-                  ),
-                  _buildMenuItem(
-                    context,
-                    'Report Issue',
-                    'Report problems or bugs',
-                    Icons.bug_report,
-                    () {
-                      // TODO: Navigate to report
-                    },
+                    () => context.push('/help-center'),
                   ),
                   _buildMenuItem(
                     context,
                     'About',
                     'App version and information',
                     Icons.info_outline,
-                    () {
-                      _showAboutDialog(context);
-                    },
+                    () => context.push('/about'),
                   ),
                 ]),
                 
@@ -405,10 +423,12 @@ class ProfileScreen extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(context).pop();
-              authProvider.logout();
-              context.go('/');
+              await authProvider.logout();
+              if (context.mounted) {
+                context.go('/auth');
+              }
             },
             child: const Text('Logout'),
           ),
@@ -497,32 +517,46 @@ class ProfileScreen extends StatelessWidget {
         );
 
         try {
-          // Upload to Firebase Storage
+          // Upload image to Firebase Storage
           final File imageFile = File(image.path);
-          final String fileName = 'profile_${authProvider.currentUser?.id}_${DateTime.now().millisecondsSinceEpoch}.jpg';
-          final String? downloadUrl = await FirebaseService.uploadFile(imageFile, 'profile_photos/$fileName');
-
-          if (downloadUrl != null) {
-            // Update user profile
-            await authProvider.updateProfile(profilePhotoUrl: downloadUrl);
-            
-            // Close loading dialog
-            Navigator.pop(context);
-            
-            // Show success message
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Profile photo updated successfully!'),
-                backgroundColor: AppTheme.verifiedGreen,
-              ),
-            );
-          } else {
-            Navigator.pop(context);
-            _showErrorSnackBar(context, 'Failed to upload image. Please try again.');
-          }
+          final String userId = authProvider.currentUser?.id ?? 'unknown';
+          final String fileName = 'profile-photos/$userId/${DateTime.now().millisecondsSinceEpoch}.jpg';
+          final Reference ref = FirebaseStorage.instance.ref().child(fileName);
+          
+          // Upload the file with metadata
+          final UploadTask uploadTask = ref.putFile(
+            imageFile,
+            SettableMetadata(
+              contentType: 'image/jpeg',
+              customMetadata: {
+                'uploadedBy': userId,
+                'uploadedAt': DateTime.now().toIso8601String(),
+              },
+            ),
+          );
+          
+          // Wait for upload to complete
+          final TaskSnapshot snapshot = await uploadTask;
+          
+          // Get the download URL
+          final String downloadUrl = await snapshot.ref.getDownloadURL();
+          
+          // Update user profile with Firebase Storage URL
+          await authProvider.updateProfile(profilePhotoUrl: downloadUrl);
+          
+          // Close loading dialog
+          Navigator.pop(context);
+          
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profile photo updated successfully!'),
+              backgroundColor: AppTheme.verifiedGreen,
+            ),
+          );
         } catch (e) {
           Navigator.pop(context);
-          _showErrorSnackBar(context, 'Error uploading image: ${e.toString()}');
+          _showErrorSnackBar(context, 'Error updating profile photo: ${e.toString()}');
         }
       }
     } catch (e) {
@@ -617,24 +651,24 @@ class ProfileScreen extends StatelessWidget {
                 return;
               }
 
-              // Show loading
+              // Close the edit dialog first
               Navigator.pop(context);
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (context) => const Center(
-                  child: CircularProgressIndicator(),
-                ),
-              );
 
               try {
-                await authProvider.updateProfile(
-                  fullName: nameController.text.trim(),
-                  companyName: companyController.text.trim(),
-                  designation: designationController.text.trim(),
-                );
+                // Get current user ID
+                final userId = authProvider.currentUser?.userId ?? authProvider.currentUser?.id;
+                if (userId == null) {
+                  _showErrorSnackBar(context, 'No user logged in');
+                  return;
+                }
+
+                // Use ProfileService to update profile
+                await ProfileService.updateProfile(userId, {
+                  'fullName': nameController.text.trim(),
+                  'companyName': companyController.text.trim(),
+                  'designation': designationController.text.trim(),
+                });
                 
-                Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Profile updated successfully!'),
@@ -642,7 +676,6 @@ class ProfileScreen extends StatelessWidget {
                   ),
                 );
               } catch (e) {
-                Navigator.pop(context);
                 _showErrorSnackBar(context, 'Error updating profile: ${e.toString()}');
               }
             },
@@ -661,4 +694,229 @@ class ProfileScreen extends StatelessWidget {
       ),
     );
   }
+
+  void _showSettingsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Settings'),
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('App Preferences', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text('• Notifications: Enabled'),
+              Text('• Dark Mode: System Default'),
+              Text('• Language: English'),
+              SizedBox(height: 16),
+              Text('Privacy & Security', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text('• Data Collection: Minimal'),
+              Text('• Analytics: Anonymous'),
+              Text('• Location: Disabled'),
+              SizedBox(height: 16),
+              Text('Account', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text('• Auto-sync: Enabled'),
+              Text('• Backup: Cloud'),
+              Text('• Cache: 15 MB'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showHelpCenterDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Help Center'),
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Frequently Asked Questions', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text('Q: How do I create a digital card?'),
+              Text('A: Go to Home → Create Card → Fill details → Save'),
+              SizedBox(height: 8),
+              Text('Q: How does verification work?'),
+              Text('A: Upload documents in Profile → Verification'),
+              SizedBox(height: 8),
+              Text('Q: Can I scan QR codes?'),
+              Text('A: Yes, use the Scan tab in bottom navigation'),
+              SizedBox(height: 16),
+              Text('Contact Support', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text('Email: support@trustcard.app'),
+              Text('Phone: +1-800-TRUSTCARD'),
+              Text('Hours: 9 AM - 6 PM EST'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showReportIssueDialog(BuildContext context) {
+    final TextEditingController issueController = TextEditingController();
+    final TextEditingController emailController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Report Issue'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Help us improve by reporting any issues you encounter.'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: emailController,
+                decoration: const InputDecoration(
+                  labelText: 'Your Email (Optional)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.email),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: issueController,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Describe the issue',
+                  hintText: 'Please provide as much detail as possible...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (issueController.text.trim().isEmpty) {
+                _showErrorSnackBar(context, 'Please describe the issue');
+                return;
+              }
+              
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Issue reported successfully! We\'ll review it soon.'),
+                  backgroundColor: AppTheme.verifiedGreen,
+                ),
+              );
+            },
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPhoneVerificationDialog(BuildContext context, AuthProvider authProvider) {
+    final TextEditingController phoneController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Verify Phone Number'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Add your phone number to enhance security and enable phone-based features.',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone Number',
+                hintText: '+1234567890',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.phone),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (phoneController.text.trim().isEmpty) {
+                _showErrorSnackBar(context, 'Please enter a phone number');
+                return;
+              }
+
+              Navigator.pop(context);
+              
+              // Show loading dialog
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+
+              try {
+                // Format phone number
+                String phoneNumber = phoneController.text.trim();
+                if (!phoneNumber.startsWith('+')) {
+                  phoneNumber = '+$phoneNumber';
+                }
+
+                final success = await authProvider.verifyPhoneForEmailUser(phoneNumber);
+                
+                Navigator.pop(context); // Close loading dialog
+
+                if (success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Phone number verified successfully!'),
+                      backgroundColor: AppTheme.verifiedGreen,
+                    ),
+                  );
+                } else {
+                  _showErrorSnackBar(context, authProvider.error ?? 'Failed to verify phone number');
+                }
+              } catch (e) {
+                Navigator.pop(context); // Close loading dialog
+                _showErrorSnackBar(context, 'Error: ${e.toString()}');
+              }
+            },
+            child: const Text('Verify'),
+          ),
+        ],
+      ),
+    );
+  }
+
 }

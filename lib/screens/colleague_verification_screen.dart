@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import '../providers/card_provider.dart';
 import '../providers/auth_provider.dart';
 import '../models/user_card.dart';
+import '../models/verification_request.dart';
+import '../services/verification_request_service.dart';
+import '../widgets/contact_picker_dialog.dart';
 import '../utils/app_theme.dart';
 
 class ColleagueVerificationScreen extends StatefulWidget {
@@ -14,13 +18,11 @@ class ColleagueVerificationScreen extends StatefulWidget {
 }
 
 class _ColleagueVerificationScreenState extends State<ColleagueVerificationScreen> {
-  final List<String> _colleaguePhones = [];
-  final _phoneController = TextEditingController();
+  final List<Map<String, String>> _colleagues = []; // {phone, name}
   bool _isLoading = false;
 
   @override
   void dispose() {
-    _phoneController.dispose();
     super.dispose();
   }
 
@@ -104,8 +106,13 @@ class _ColleagueVerificationScreenState extends State<ColleagueVerificationScree
             
             const SizedBox(height: 24),
             
+            // Verification Requests
+            _buildVerificationRequests(),
+            
+            const SizedBox(height: 24),
+            
             // Added Colleagues
-            if (_colleaguePhones.isNotEmpty) _buildAddedColleagues(),
+            if (_colleagues.isNotEmpty) _buildAddedColleagues(),
             
             const SizedBox(height: 24),
             
@@ -226,35 +233,22 @@ class _ColleagueVerificationScreenState extends State<ColleagueVerificationScree
             ),
             const SizedBox(height: 16),
             
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: InputDecoration(
-                      labelText: 'Colleague Phone Number',
-                      hintText: '+91 9876543210',
-                      prefixIcon: const Icon(Icons.phone),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
+            // Contact picker button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _pickContacts,
+                icon: const Icon(Icons.contacts),
+                label: const Text('Select from Contacts'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.verifiedBlue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: _addColleague,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.verifiedBlue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text('Add'),
-                ),
-              ],
+              ),
             ),
             
             const SizedBox(height: 16),
@@ -301,14 +295,14 @@ class _ColleagueVerificationScreenState extends State<ColleagueVerificationScree
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Added Colleagues (${_colleaguePhones.length})',
+              'Added Colleagues (${_colleagues.length})',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 16),
             
-            ..._colleaguePhones.map((phone) => Container(
+            ..._colleagues.map((colleague) => Container(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
                 leading: Container(
@@ -323,11 +317,11 @@ class _ColleagueVerificationScreenState extends State<ColleagueVerificationScree
                     size: 20,
                   ),
                 ),
-                title: Text(phone),
-                subtitle: const Text('Invitation sent'),
+                title: Text(colleague['name'] ?? 'Unknown'),
+                subtitle: Text(colleague['phone'] ?? ''),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () => _removeColleague(phone),
+                  onPressed: () => _removeColleague(colleague['phone']!),
                 ),
               ),
             )),
@@ -428,49 +422,105 @@ class _ColleagueVerificationScreenState extends State<ColleagueVerificationScree
     );
   }
 
-  void _addColleague() {
-    final phone = _phoneController.text.trim();
-    if (phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a phone number'),
-          backgroundColor: Colors.orange,
-        ),
+  Future<void> _pickContacts() async {
+    try {
+      // Check if permission is already granted
+      final permission = await FlutterContacts.requestPermission();
+      
+      if (!permission) {
+        // Show permission dialog with explanation
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Contacts Permission Required'),
+              content: const Text(
+                'To select colleagues from your contacts, please allow access to your contacts. This helps you quickly add colleagues for verification.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    // Try again after user acknowledges
+                    _pickContacts();
+                  },
+                  child: const Text('Try Again'),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+
+      final contacts = await FlutterContacts.getContacts(withProperties: true);
+      
+      if (contacts.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No contacts found on your device'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Show contact picker dialog
+      final selectedContacts = await showDialog<List<Contact>>(
+        context: context,
+        builder: (context) => ContactPickerDialog(contacts: contacts),
       );
-      return;
+
+      if (selectedContacts != null && selectedContacts.isNotEmpty) {
+        for (final contact in selectedContacts) {
+          final phone = contact.phones.isNotEmpty 
+              ? contact.phones.first.number
+              : '';
+          final name = contact.displayName;
+          
+          if (phone.isNotEmpty && !_colleagues.any((c) => c['phone'] == phone)) {
+            _colleagues.add({'name': name, 'phone': phone});
+          }
+        }
+        
+        setState(() {});
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Added ${selectedContacts.length} colleagues'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error accessing contacts: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
-
-    if (_colleaguePhones.contains(phone)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('This colleague is already added'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _colleaguePhones.add(phone);
-      _phoneController.clear();
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Invitation sent to $phone'),
-        backgroundColor: Colors.green,
-      ),
-    );
   }
+
 
   void _removeColleague(String phone) {
     setState(() {
-      _colleaguePhones.remove(phone);
+      _colleagues.removeWhere((c) => c['phone'] == phone);
     });
   }
 
   Future<void> _submitVerification() async {
-    if (_colleaguePhones.length < 2) {
+    if (_colleagues.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please add at least 2 colleagues'),
@@ -485,31 +535,50 @@ class _ColleagueVerificationScreenState extends State<ColleagueVerificationScree
     });
 
     try {
-      // Simulate sending invitations and waiting for responses
-      await Future.delayed(const Duration(seconds: 2));
-      
-      // Update user's verification level
-      final authProvider = context.read<AuthProvider>();
-      final cardProvider = context.read<CardProvider>();
-      
-      if (authProvider.currentUser != null) {
-        final updatedCard = authProvider.currentUser!.copyWith(
-          verificationLevel: VerificationLevel.peer,
-          verifiedByColleagues: _colleaguePhones,
+      // Send verification requests to all colleagues
+      int successCount = 0;
+      for (final colleague in _colleagues) {
+        final success = await VerificationRequestService.sendVerificationRequest(
+          colleaguePhone: colleague['phone']!,
+          colleagueName: colleague['name']!,
         );
-        
-        await cardProvider.updateCard(updatedCard);
-        await authProvider.updateProfile();
+        if (success) successCount++;
       }
       
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Colleague verification submitted!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        context.pop();
+      if (successCount > 0) {
+        // Update user's verification level
+        final authProvider = context.read<AuthProvider>();
+        final cardProvider = context.read<CardProvider>();
+        
+        if (authProvider.currentUser != null) {
+          final colleaguePhones = _colleagues.map((c) => c['phone']!).toList();
+          final updatedCard = authProvider.currentUser!.copyWith(
+            verificationLevel: VerificationLevel.peer,
+            verifiedByColleagues: colleaguePhones,
+          );
+          
+          await cardProvider.updateCard(updatedCard);
+          await authProvider.updateProfile();
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Verification requests sent to $successCount colleagues!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          context.pop();
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to send verification requests. Please try again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -527,5 +596,65 @@ class _ColleagueVerificationScreenState extends State<ColleagueVerificationScree
         });
       }
     }
+  }
+
+  Widget _buildVerificationRequests() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.notifications_outlined,
+                  color: AppTheme.verifiedBlue,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Verification Requests',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'View and respond to verification requests from colleagues',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => context.push('/pending-verification'),
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text('View Requests'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.verifiedBlue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

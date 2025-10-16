@@ -145,6 +145,28 @@ class NotificationService extends ChangeNotifier {
     addNotification(notification);
   }
 
+  // NEW: Notify when card is scanned
+  void notifyCardScanned(String scannerName, String? scannerCompany) {
+    final companyText = scannerCompany != null && scannerCompany.isNotEmpty
+        ? ' from $scannerCompany'
+        : '';
+    
+    final notification = NotificationItem(
+      id: 'notif_${DateTime.now().millisecondsSinceEpoch}',
+      type: NotificationType.cardScanned,
+      title: 'Your Card Was Scanned',
+      message: '$scannerName$companyText scanned your card',
+      timestamp: DateTime.now(),
+      isRead: false,
+      data: {
+        'scannerName': scannerName,
+        'scannerCompany': scannerCompany,
+      },
+    );
+    
+    addNotification(notification);
+  }
+
   // Get notifications by type
   List<NotificationItem> getNotificationsByType(NotificationType type) {
     return _notifications.where((n) => n.type == type).toList();
@@ -210,6 +232,7 @@ enum NotificationType {
   companyVerificationRequest,
   systemUpdate,
   general,
+  cardScanned, // NEW: Card scan notification
 }
 
 // Mock notification data for testing
@@ -226,7 +249,7 @@ class MockNotificationService {
         data: {
           'userCardId': 'card_1',
           'userName': 'Rahul Kumar',
-          'companyName': 'Swiggy',
+          'companyName': 'Company 1 Pvt Ltd',
           'designation': 'Delivery Partner',
         },
       ),

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import '../providers/card_provider.dart';
+import '../providers/auth_provider.dart';
 import '../models/user_card.dart';
 import '../utils/app_theme.dart';
-import 'company_employee_management_screen.dart';
+import '../services/company_verification_service.dart';
 
 class CompanyAdminScreen extends StatefulWidget {
   const CompanyAdminScreen({super.key});
@@ -27,6 +27,22 @@ class _CompanyAdminScreenState extends State<CompanyAdminScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Check if user is company verified
+    final authProvider = context.read<AuthProvider>();
+    final currentUser = authProvider.currentUser;
+    
+    if (currentUser?.isCompanyVerified != true) {
+      // User is not verified, redirect to verification screen
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        context.go('/company-verification');
+      });
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Company Admin'),
@@ -39,16 +55,12 @@ class _CompanyAdminScreenState extends State<CompanyAdminScreen> {
             icon: const Icon(Icons.notifications),
             onPressed: () => _showNotifications(),
           ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _createEmployeeID(),
-          ),
         ],
       ),
       body: Column(
         children: [
           // Company Info Header
-          _buildCompanyHeader(),
+          _buildCompanyHeader(currentUser),
           
           // Tab Navigation
           _buildTabNavigation(),
@@ -62,7 +74,7 @@ class _CompanyAdminScreenState extends State<CompanyAdminScreen> {
     );
   }
 
-  Widget _buildCompanyHeader() {
+  Widget _buildCompanyHeader(UserCard? currentUser) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -95,7 +107,7 @@ class _CompanyAdminScreenState extends State<CompanyAdminScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Swiggy Admin Dashboard',
+                  '${currentUser?.companyName ?? 'Company'} Admin Dashboard',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -340,7 +352,7 @@ class _CompanyAdminScreenState extends State<CompanyAdminScreen> {
                   const SizedBox(height: 8),
                   _buildDetailRow('Company', request.userCard.companyName ?? 'Unknown'),
                   _buildDetailRow('Employee ID', request.userCard.companyId ?? 'Not provided'),
-                  _buildDetailRow('Phone', _maskPhoneNumber(request.userCard.phoneNumber)),
+                  _buildDetailRow('Phone', request.userCard.phoneNumber), // Show full phone number
                   _buildDetailRow('Requested', _formatDate(request.requestedAt)),
                   if (request.documents.isNotEmpty) ...[
                     const SizedBox(height: 8),
@@ -392,6 +404,62 @@ class _CompanyAdminScreenState extends State<CompanyAdminScreen> {
                       ),
                     ),
                   ),
+                ],
+              ),
+            ] else ...[
+              // Status change buttons for approved/rejected requests
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  if (request.status == 'approved') ...[
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _changeStatus(request, 'rejected'),
+                        icon: const Icon(Icons.close, size: 16),
+                        label: const Text('Reject'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _changeStatus(request, 'pending'),
+                        icon: const Icon(Icons.schedule, size: 16),
+                        label: const Text('Re-review'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.orange,
+                          side: const BorderSide(color: Colors.orange),
+                        ),
+                      ),
+                    ),
+                  ] else if (request.status == 'rejected') ...[
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _changeStatus(request, 'approved'),
+                        icon: const Icon(Icons.check, size: 16),
+                        label: const Text('Approve'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.verifiedGreen,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _changeStatus(request, 'pending'),
+                        icon: const Icon(Icons.schedule, size: 16),
+                        label: const Text('Re-review'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.orange,
+                          side: const BorderSide(color: Colors.orange),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -471,9 +539,10 @@ class _CompanyAdminScreenState extends State<CompanyAdminScreen> {
           id: 'req_1',
           userCard: UserCard(
             id: 'card_1',
+            userId: 'user_1',
             fullName: 'Rahul Kumar',
             phoneNumber: '+91 9876543210',
-            companyName: 'Swiggy',
+            companyName: 'Company 1 Pvt Ltd',
             designation: 'Delivery Partner',
             companyId: 'SWG12345',
             verificationLevel: VerificationLevel.document,
@@ -491,9 +560,10 @@ class _CompanyAdminScreenState extends State<CompanyAdminScreen> {
           id: 'req_2',
           userCard: UserCard(
             id: 'card_2',
+            userId: 'user_2',
             fullName: 'Priya Sharma',
             phoneNumber: '+91 9876543211',
-            companyName: 'Swiggy',
+            companyName: 'Company 1 Pvt Ltd',
             designation: 'Delivery Executive',
             companyId: 'SWG67890',
             verificationLevel: VerificationLevel.peer,
@@ -511,32 +581,128 @@ class _CompanyAdminScreenState extends State<CompanyAdminScreen> {
     });
   }
 
-  void _approveRequest(VerificationRequest request) {
-    setState(() {
-      _pendingRequests.remove(request);
-      _approvedRequests.add(request.copyWith(status: 'approved'));
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${request.userCard.fullName} approved for company verification'),
-        backgroundColor: Colors.green,
-      ),
+  void _approveRequest(VerificationRequest request) async {
+    // Update database first
+    final success = await CompanyVerificationService.approveRequest(
+      requestId: request.id,
+      reviewedBy: 'admin', // TODO: Get from current user
     );
+    
+    if (success) {
+      // Update local state after successful database update
+      setState(() {
+        _pendingRequests.remove(request);
+        _approvedRequests.add(request.copyWith(status: 'approved'));
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${request.userCard.fullName} approved for company verification'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to approve request'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
-  void _rejectRequest(VerificationRequest request) {
-    setState(() {
-      _pendingRequests.remove(request);
-      _rejectedRequests.add(request.copyWith(status: 'rejected'));
-    });
+  void _rejectRequest(VerificationRequest request) async {
+    // Update database first
+    final success = await CompanyVerificationService.rejectRequest(
+      requestId: request.id,
+      reviewedBy: 'admin', // TODO: Get from current user
+      rejectionReason: 'Company admin rejected the request',
+    );
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${request.userCard.fullName} verification rejected'),
-        backgroundColor: Colors.red,
+    if (success) {
+      // Update local state after successful database update
+      setState(() {
+        _pendingRequests.remove(request);
+        _rejectedRequests.add(request.copyWith(status: 'rejected'));
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${request.userCard.fullName} verification rejected'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to reject request'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _changeStatus(VerificationRequest request, String newStatus) async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Change Status'),
+        content: Text('Are you sure you want to change status to $newStatus?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirm'),
+          ),
+        ],
       ),
     );
+    
+    if (confirmed == true) {
+      // Update database first
+      final success = await CompanyVerificationService.changeRequestStatus(
+        requestId: request.id,
+        newStatus: newStatus,
+        reviewedBy: 'admin', // TODO: Get from current user
+      );
+      
+      if (success) {
+        // Update local state after successful database update
+        setState(() {
+          if (newStatus == 'pending') {
+            _pendingRequests.add(request.copyWith(status: newStatus));
+            _approvedRequests.removeWhere((r) => r.id == request.id);
+            _rejectedRequests.removeWhere((r) => r.id == request.id);
+          } else if (newStatus == 'approved') {
+            _approvedRequests.add(request.copyWith(status: newStatus));
+            _pendingRequests.removeWhere((r) => r.id == request.id);
+            _rejectedRequests.removeWhere((r) => r.id == request.id);
+          } else if (newStatus == 'rejected') {
+            _rejectedRequests.add(request.copyWith(status: newStatus));
+            _pendingRequests.removeWhere((r) => r.id == request.id);
+            _approvedRequests.removeWhere((r) => r.id == request.id);
+          }
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Status changed to $newStatus'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update status'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _showNotifications() {
@@ -560,10 +726,12 @@ class _CompanyAdminScreenState extends State<CompanyAdminScreen> {
     }
   }
 
-  String _maskPhoneNumber(String phone) {
-    if (phone.length <= 4) return phone;
-    return '${phone.substring(0, phone.length - 4).replaceAll(RegExp(r'\d'), 'X')}${phone.substring(phone.length - 4)}';
-  }
+  // Phone masking disabled - showing full number
+  // Uncomment below if you want to mask phone numbers for privacy
+  // String _maskPhoneNumber(String phone) {
+  //   if (phone.length <= 4) return phone;
+  //   return '${phone.substring(0, phone.length - 4).replaceAll(RegExp(r'\d'), 'X')}${phone.substring(phone.length - 4)}';
+  // }
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';

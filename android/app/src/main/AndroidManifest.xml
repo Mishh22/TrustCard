@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
     
     <!-- Camera features -->
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
@@ -13,7 +14,10 @@
     <application
         android:label="TrustCard"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="true"
+        android:theme="@style/LaunchTheme"
+        android:exported="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"

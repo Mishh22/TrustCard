@@ -3,9 +3,15 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:io';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../providers/card_provider.dart';
+import '../providers/auth_provider.dart' as app_auth;
 import '../models/user_card.dart';
 import '../utils/app_theme.dart';
+import '../services/employee_invitation_service.dart';
+import '../services/firebase_service.dart';
 
 class CreateCardScreen extends StatefulWidget {
   const CreateCardScreen({super.key});
@@ -22,9 +28,41 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
   final _designationController = TextEditingController();
   final _companyIdController = TextEditingController();
   final _companyPhoneController = TextEditingController();
+  final _otpController = TextEditingController();
+  final _emailController = TextEditingController();
   
   String? _selectedProfileImage;
   bool _isLoading = false;
+  bool _isEmailVerified = false;
+  // Removed phone verification - phone is verified at login
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-populate phone number and name from authenticated user
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authProvider = context.read<app_auth.AuthProvider>();
+      if (authProvider.currentUser != null) {
+        // Auto-populate name with user's official name
+        _nameController.text = authProvider.currentUser!.fullName;
+        
+        // Auto-populate phone number (remove +91 prefix if present for display)
+        if (authProvider.currentUser!.phoneNumber != null) {
+          String phone = authProvider.currentUser!.phoneNumber!;
+          if (phone.startsWith('+91')) {
+            phone = phone.substring(3);
+          }
+          _phoneController.text = phone;
+        }
+      }
+    });
+  }
+
+  // Check if user is new (has default "User" name)
+  bool get _isNewUser {
+    final authProvider = context.read<app_auth.AuthProvider>();
+    return authProvider.currentUser?.fullName == 'User';
+  }
 
   @override
   void dispose() {
@@ -34,6 +72,8 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     _designationController.dispose();
     _companyIdController.dispose();
     _companyPhoneController.dispose();
+    _otpController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
@@ -67,34 +107,118 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
               
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(
+                readOnly: !_isNewUser,
+                decoration: InputDecoration(
                   labelText: 'Full Name',
-                  hintText: 'Enter your full name',
-                  prefixIcon: Icon(Icons.person),
+                  hintText: _isNewUser ? 'Enter your full name' : 'Enter your full name',
+                  helperText: _isNewUser 
+                      ? 'Enter your real name - this will be your verified identity for all cards'
+                      : 'Your verified identity (cannot be changed)',
+                  helperMaxLines: 2,
+                  prefixIcon: const Icon(Icons.person),
+                  suffixIcon: _isNewUser 
+                      ? const Icon(Icons.edit, color: Colors.blue)
+                      : const Icon(Icons.verified, color: Colors.green),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter your full name';
                   }
+                  
+                  // For new users, allow any name (but not "User")
+                  if (_isNewUser) {
+                    if (value.trim().toLowerCase() == 'user') {
+                      return 'Please enter your real name, not "User"';
+                    }
+                    return null;
+                  }
+                  
+                  // For existing users, check if name matches user's official name
+                  final authProvider = context.read<app_auth.AuthProvider>();
+                  if (authProvider.currentUser != null) {
+                    final officialName = authProvider.currentUser!.fullName;
+                    if (value.trim().toLowerCase() != officialName.toLowerCase()) {
+                      return 'Name must match your verified identity: "$officialName"\n\nPlease check the name correctly as no changes may be permitted later.';
+                    }
+                  }
+                  
                   return null;
                 },
               ),
               
               const SizedBox(height: 16),
               
+                      TextFormField(
+                        controller: _phoneController,
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Phone Number',
+                          hintText: '9876543210',
+                          helperText: 'Phone number from your account (verified)',
+                          helperMaxLines: 2,
+                          prefixIcon: Icon(Icons.phone),
+                          suffixIcon: Icon(Icons.verified, color: Colors.green),
+                        ),
+                        keyboardType: TextInputType.phone,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter your phone number';
+                          }
+                          // Phone number validation for Indian numbers (10 digits)
+                          if (value.length < 10) {
+                            return 'Please enter complete 10-digit phone number';
+                          }
+                          if (value.length > 10) {
+                            return 'Phone number cannot exceed 10 digits';
+                          }
+                          // Check if it starts with valid Indian mobile prefixes (6,7,8,9)
+                          if (!RegExp(r'^[6-9]').hasMatch(value)) {
+                            return 'Indian mobile number must start with 6, 7, 8, or 9';
+                          }
+                          return null;
+                        },
+                        // Phone is read-only and pre-verified at login
+                      ),
+              
+              // Removed phone verification section - phone is verified at login
+              
+              const SizedBox(height: 16),
+              
+              // Official Email Field (Optional)
               TextFormField(
-                controller: _phoneController,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number',
-                  hintText: 'Enter your phone number',
-                  prefixIcon: Icon(Icons.phone),
+                controller: _emailController,
+                decoration: InputDecoration(
+                  labelText: 'Official Email (Optional)',
+                  hintText: 'your.email@company.com',
+                  helperText: _isEmailVerified 
+                      ? 'Email verified successfully!'
+                      : 'Enter your official email for verification',
+                  helperMaxLines: 2,
+                  prefixIcon: const Icon(Icons.email),
+                  suffixIcon: _isEmailVerified 
+                      ? const Icon(Icons.verified, color: Colors.green)
+                      : IconButton(
+                          icon: const Icon(Icons.send),
+                          onPressed: _emailController.text.isNotEmpty ? _sendEmailVerification : null,
+                        ),
                 ),
-                keyboardType: TextInputType.phone,
+                keyboardType: TextInputType.emailAddress,
                 validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your phone number';
+                  if (value != null && value.isNotEmpty) {
+                    // Email format validation
+                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                      return 'Please enter a valid email address';
+                    }
+                    if (!_isEmailVerified) {
+                      return 'Please verify your email address';
+                    }
                   }
                   return null;
+                },
+                onChanged: (value) {
+                  setState(() {
+                    _isEmailVerified = false; // Reset verification when email changes
+                  });
                 },
               ),
               
@@ -253,6 +377,8 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     );
   }
 
+  // Removed unused phone verification methods - phone is verified at login
+
   Widget _buildVerificationInfo() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -322,6 +448,55 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
     );
   }
 
+  // Email verification methods
+  Future<void> _sendEmailVerification() async {
+    if (_emailController.text.isEmpty) return;
+    
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      // Send email verification using Firebase Auth
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await user.sendEmailVerification();
+        
+        setState(() {
+          _isLoading = false;
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Verification email sent to ${_emailController.text}'),
+              backgroundColor: Colors.blue,
+              action: SnackBarAction(
+                label: 'Check Email',
+                onPressed: () {
+                  // Could open email app here
+                },
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send verification email: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _pickProfileImage() async {
     try {
       final ImagePicker picker = ImagePicker();
@@ -333,9 +508,68 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       );
       
       if (image != null) {
+        // Show loading indicator
         setState(() {
-          _selectedProfileImage = image.path;
+          _isLoading = true;
         });
+        
+        try {
+          // Upload image to Firebase Storage
+          final File imageFile = File(image.path);
+          final String userId = context.read<app_auth.AuthProvider>().currentUser?.id ?? 'unknown';
+          final String fileName = 'profile-photos/$userId/${const Uuid().v4()}.jpg';
+          final Reference ref = FirebaseStorage.instance.ref().child(fileName);
+          
+          print('Uploading image to: $fileName');
+          
+          // Upload the file with metadata
+          final UploadTask uploadTask = ref.putFile(
+            imageFile,
+            SettableMetadata(
+              contentType: 'image/jpeg',
+              customMetadata: {
+                'uploadedBy': userId,
+                'uploadedAt': DateTime.now().toIso8601String(),
+              },
+            ),
+          );
+          
+          // Wait for upload to complete
+          final TaskSnapshot snapshot = await uploadTask;
+          
+          // Get the download URL
+          final String downloadUrl = await snapshot.ref.getDownloadURL();
+          
+          print('Image uploaded successfully: $downloadUrl');
+          
+          setState(() {
+            _selectedProfileImage = downloadUrl;
+            _isLoading = false;
+          });
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Photo uploaded successfully!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } catch (uploadError) {
+          print('Upload error: $uploadError');
+          setState(() {
+            _isLoading = false;
+          });
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to upload image: $uploadError'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -352,13 +586,34 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       return;
     }
 
+    // Check if phone verification is required and completed
+    // Phone is already verified at login - no need to check
+
     setState(() {
       _isLoading = true;
     });
 
     try {
+      // For new users, update their profile with the entered name
+      if (_isNewUser) {
+        final authProvider = context.read<app_auth.AuthProvider>();
+        final newName = _nameController.text.trim();
+        
+        // Update user profile with the new name
+        await authProvider.updateProfile(fullName: newName);
+        
+        // Show success message for profile update
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Profile updated with name: $newName'),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+
       final card = UserCard(
         id: const Uuid().v4(),
+        userId: FirebaseService.getCurrentUser()?.uid ?? 'unknown',
         fullName: _nameController.text.trim(),
         phoneNumber: _phoneController.text.trim(),
         profilePhotoUrl: _selectedProfileImage,
@@ -369,6 +624,9 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
             : null,
         companyPhone: _companyPhoneController.text.trim().isNotEmpty 
             ? _companyPhoneController.text.trim() 
+            : null,
+        companyEmail: _emailController.text.trim().isNotEmpty 
+            ? _emailController.text.trim() 
             : null,
         verificationLevel: VerificationLevel.basic,
         isCompanyVerified: false,
@@ -381,6 +639,35 @@ class _CreateCardScreenState extends State<CreateCardScreen> {
       final success = await context.read<CardProvider>().createCard(card);
       
       if (success && mounted) {
+        // Validate employee ID if entered
+        if (_companyIdController.text.trim().isNotEmpty) {
+          final validationResult = await EmployeeInvitationService.validateEmployeeId(
+            enteredEmployeeId: _companyIdController.text.trim(),
+            phoneNumber: _phoneController.text.trim(),
+          );
+          
+          if (validationResult != null) {
+            if (validationResult['status'] == 'expired') {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Employee invitation has expired'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            } else {
+              // Notify company about card creation
+              await EmployeeInvitationService.notifyCompanyAboutEmployeeCard(
+                companyId: validationResult['companyId'],
+                employeeName: _nameController.text.trim(),
+                employeePhone: _phoneController.text.trim(),
+                enteredEmployeeId: validationResult['enteredEmployeeId'],
+                correctEmployeeId: validationResult['correctEmployeeId'],
+                isMatch: validationResult['isMatch'],
+              );
+            }
+          }
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Digital card created successfully!'),

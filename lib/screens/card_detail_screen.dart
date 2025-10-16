@@ -5,6 +5,8 @@ import '../providers/card_provider.dart';
 import '../models/user_card.dart';
 import '../widgets/digital_card_widget.dart';
 import '../utils/app_theme.dart';
+import '../services/block_card_service.dart';
+import '../services/firebase_service.dart';
 
 class CardDetailScreen extends StatefulWidget {
   final String cardId;
@@ -117,9 +119,9 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
             // Verification Details
             _buildVerificationDetails(),
             
-            // Customer Ratings
+            // Trust Ratings
             if (_card!.customerRating != null)
-              _buildCustomerRatings(),
+              _buildTrustRatings(),
             
             // Colleague Verification
             if (_card!.verifiedByColleagues.isNotEmpty)
@@ -169,7 +171,7 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${(_card!.trustScore * 100).toInt()}%',
+                          '${_card!.trustScore.toInt()}%',
                           style: Theme.of(context).textTheme.displayMedium?.copyWith(
                             color: AppTheme.getTrustScoreColor(_card!.trustScore),
                             fontWeight: FontWeight.bold,
@@ -177,7 +179,7 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
                         ),
                         const SizedBox(height: 8),
                         LinearProgressIndicator(
-                          value: _card!.trustScore,
+                          value: _card!.trustScore / 100.0,
                           backgroundColor: Colors.grey[200],
                           valueColor: AlwaysStoppedAnimation<Color>(
                             AppTheme.getTrustScoreColor(_card!.trustScore),
@@ -197,7 +199,7 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: AppTheme.getTrustScoreColor(_card!.trustScore).withOpacity(0.1),
+                      color: AppTheme.getTrustScoreColor(_card!.trustScore).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
@@ -303,7 +305,7 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
     );
   }
 
-  Widget _buildCustomerRatings() {
+  Widget _buildTrustRatings() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Card(
@@ -321,7 +323,7 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    'Customer Ratings',
+                    'Trust Ratings',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -429,7 +431,7 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
             child: ElevatedButton.icon(
               onPressed: () => _rateCard(),
               icon: const Icon(Icons.star),
-              label: const Text('Rate Service'),
+              label: const Text('Rate Professional'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.verifiedYellow,
                 foregroundColor: Colors.white,
@@ -485,7 +487,7 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
               title: const Text('View Full Details'),
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Show full details
+                _showFullDetailsModal();
               },
             ),
             ListTile(
@@ -493,15 +495,22 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
               title: const Text('View History'),
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Show scan history
+                context.push('/scan-history/${_card!.id}');
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.block),
-              title: const Text('Block Card'),
-              onTap: () {
-                Navigator.pop(context);
-                _blockCard();
+            // Dynamic Block/Unblock based on current status
+            FutureBuilder<bool>(
+              future: _isCardBlocked(_card!.id),
+              builder: (context, snapshot) {
+                final isBlocked = snapshot.data ?? false;
+                return ListTile(
+                  leading: Icon(isBlocked ? Icons.block : Icons.block),
+                  title: Text(isBlocked ? 'Unblock Card' : 'Block Card'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    isBlocked ? _unblockCard() : _blockCard();
+                  },
+                );
               },
             ),
           ],
@@ -514,11 +523,11 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Rate Service'),
+        title: const Text('Rate Professional'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('How was your experience with this service?'),
+            const Text('How was your professional experience with this person?'),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -606,6 +615,91 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
     );
   }
 
+  void _showFullDetailsModal() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Full Card Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildDetailRow('Name', _card!.fullName),
+              _buildDetailRow('Phone', _card!.phoneNumber),
+              if (_card!.companyName != null && _card!.companyName!.isNotEmpty)
+                _buildDetailRow('Company', _card!.companyName!),
+              if (_card!.designation != null && _card!.designation!.isNotEmpty)
+                _buildDetailRow('Designation', _card!.designation!),
+              if (_card!.companyPhone != null && _card!.companyPhone!.isNotEmpty)
+                _buildDetailRow('Company Phone', _card!.companyPhone!),
+              if (_card!.companyEmail != null && _card!.companyEmail!.isNotEmpty)
+                _buildDetailRow('Company Email', _card!.companyEmail!),
+              if (_card!.workLocation != null && _card!.workLocation!.isNotEmpty)
+                _buildDetailRow('Work Location', _card!.workLocation!),
+              _buildDetailRow('Verification Level', _card!.verificationLevel.name),
+              _buildDetailRow('Company Verified', _card!.isCompanyVerified ? 'Yes' : 'No'),
+              if (_card!.customerRating != null)
+                _buildDetailRow('Trust Score', '${_card!.customerRating!.toStringAsFixed(1)}/5.0'),
+              if (_card!.totalRatings != null)
+                _buildDetailRow('Total Ratings', _card!.totalRatings.toString()),
+              _buildDetailRow('Created At', _formatDate(_card!.createdAt)),
+              if (_card!.expiryDate != null)
+                _buildDetailRow('Expiry Date', _formatDate(_card!.expiryDate!)),
+              _buildDetailRow('Version', _card!.version.toString()),
+              _buildDetailRow('Active', _card!.isActive ? 'Yes' : 'No'),
+              if (_card!.verifiedByColleagues.isNotEmpty)
+                _buildDetailRow('Verified By', '${_card!.verifiedByColleagues.length} colleagues'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label:',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _isCardBlocked(String cardId) async {
+    final currentUser = FirebaseService.getCurrentUser();
+    if (currentUser == null) return false;
+
+    return await BlockCardService.isCardBlocked(
+      blockerId: currentUser.uid,
+      blockedCardId: cardId,
+    );
+  }
+
   void _blockCard() {
     showDialog(
       context: context,
@@ -618,15 +712,9 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              // TODO: Implement blocking
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Card blocked successfully!'),
-                  backgroundColor: Colors.green,
-                ),
-              );
+              await _implementBlocking();
             },
             child: const Text('Block'),
           ),
@@ -635,21 +723,116 @@ class _CardDetailScreenState extends State<CardDetailScreen> {
     );
   }
 
+  void _unblockCard() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Unblock Card'),
+        content: const Text('Are you sure you want to unblock this card? You\'ll be able to scan it again.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _implementUnblocking();
+            },
+            child: const Text('Unblock'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _implementBlocking() async {
+    final currentUser = FirebaseService.getCurrentUser();
+    if (currentUser == null) return;
+
+    try {
+      final success = await BlockCardService.blockCard(
+        blockerId: currentUser.uid,
+        blockedCardId: _card!.id,
+        blockedCardOwnerId: _card!.userId,
+        reason: 'User blocked card',
+      );
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Card blocked successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to block card. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error blocking card. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _implementUnblocking() async {
+    final currentUser = FirebaseService.getCurrentUser();
+    if (currentUser == null) return;
+
+    try {
+      final success = await BlockCardService.unblockCard(
+        blockerId: currentUser.uid,
+        blockedCardId: _card!.id,
+      );
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Card unblocked successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to unblock card. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error unblocking card. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
   }
 
   String _getTrustScoreDescription(double score) {
-    if (score >= 0.8) return 'Excellent trust level';
-    if (score >= 0.6) return 'Good trust level';
-    if (score >= 0.4) return 'Fair trust level';
+    if (score >= 80) return 'Excellent trust level';
+    if (score >= 60) return 'Good trust level';
+    if (score >= 40) return 'Fair trust level';
     return 'Low trust level';
   }
 
   IconData _getTrustScoreIcon(double score) {
-    if (score >= 0.8) return Icons.star;
-    if (score >= 0.6) return Icons.thumb_up;
-    if (score >= 0.4) return Icons.check_circle;
+    if (score >= 80) return Icons.star;
+    if (score >= 60) return Icons.thumb_up;
+    if (score >= 40) return Icons.check_circle;
     return Icons.warning;
   }
 }

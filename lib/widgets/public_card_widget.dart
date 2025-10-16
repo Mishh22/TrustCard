@@ -24,7 +24,7 @@ class PublicCardWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -527,6 +527,17 @@ class PublicCardWidget extends StatelessWidget {
           Color(0xFF065F46),
           Color(0xFF10B981),
           Color(0xFF059669),
+        ],
+      );
+    } else if (card.verificationLevel == VerificationLevel.peer) {
+      // Blue gradient for peer verified
+      return const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFF1E40AF), // Dark blue
+          Color(0xFF3B82F6), // Blue
+          Color(0xFF2563EB), // Blue
         ],
       );
     } else {

@@ -2,10 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 import '../providers/card_provider.dart';
+import '../providers/auth_provider.dart' as app_auth;
 import '../models/user_card.dart';
 import '../utils/app_theme.dart';
 import '../widgets/public_card_widget.dart';
+import '../services/firebase_service.dart';
+import '../services/scan_history_service.dart';
+import '../services/scan_notification_service.dart';
+import '../services/notification_service.dart';
+import '../services/block_card_service.dart';
 
 class ScanCardScreen extends StatefulWidget {
   const ScanCardScreen({super.key});
@@ -205,34 +213,95 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
     });
 
     try {
-      // In a real app, you would decode the QR code data and fetch card details
-      // For now, we'll simulate finding a card by ID
       final cardProvider = context.read<CardProvider>();
       
-      // Simulate API call to get card details
-      await Future.delayed(const Duration(seconds: 1));
+      // Fetch real card data from Firebase using the QR code (user ID)
+      final cardData = await FirebaseService.getPublicCardById(code);
       
-      // Create a mock scanned card (in real app, this would come from API)
-      final scannedCard = UserCard(
-        id: code,
-        fullName: 'Rahul Kumar',
-        phoneNumber: '+91 9876543210',
-        companyName: 'Swiggy',
-        designation: 'Delivery Partner',
-        companyId: 'SWG12345',
-        verificationLevel: VerificationLevel.document,
-        isCompanyVerified: false,
-        customerRating: 4.5,
-        totalRatings: 120,
-        verifiedByColleagues: ['colleague1', 'colleague2'],
-        createdAt: DateTime.now().subtract(const Duration(days: 30)),
-        expiryDate: DateTime.now().add(const Duration(days: 60)),
-        version: 1,
-        isActive: true,
-      );
+      if (cardData == null) {
+        // Card not found - show error
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Card not found or inactive. Please check the QR code.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+      
+      // Check if card is active
+      if (cardData['isActive'] != true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This card is no longer active.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Check if user has blocked this card
+      final currentUser = FirebaseService.getCurrentUser();
+      if (currentUser != null) {
+        final isBlocked = await BlockCardService.isCardBlocked(
+          blockerId: currentUser.uid,
+          blockedCardId: code,
+        );
+
+        if (isBlocked) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('This card is blocked. Unblock it to scan again.'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+          return;
+        }
+      }
+      
+      // Create UserCard from real data
+      final scannedCard = UserCard.fromMap(cardData);
 
       // Add to scanned cards
       await cardProvider.scanCard(scannedCard);
+
+      // NEW: Record scan history and send notification
+      final authProvider = context.read<app_auth.AuthProvider>();
+      
+      if (currentUser != null && authProvider.currentUser != null) {
+        // Record the scan in scan history
+        await ScanHistoryService.recordScan(
+          cardId: scannedCard.id,
+          cardOwnerId: code, // The QR code contains the user ID
+          scannerId: currentUser.uid,
+          scannerName: authProvider.currentUser!.fullName ?? 'Unknown',
+          scannerCompany: authProvider.currentUser!.companyName ?? 'Unknown Company',
+        );
+
+        // Send notification to card owner
+        await ScanNotificationService.sendScanNotification(
+          cardOwnerId: code, // The QR code contains the user ID
+          scannerName: authProvider.currentUser!.fullName ?? 'Someone',
+          scannerCompany: authProvider.currentUser!.companyName ?? 'Unknown Company',
+          cardId: scannedCard.id,
+        );
+
+        // Send in-app notification (for immediate UI update)
+        final notificationService = context.read<NotificationService>();
+        notificationService.notifyCardScanned(
+          authProvider.currentUser!.fullName ?? 'Someone',
+          authProvider.currentUser!.companyName,
+        );
+      }
 
       if (mounted) {
         // Show success feedback
@@ -425,27 +494,118 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
               leading: const Icon(Icons.phone, color: AppTheme.verifiedGreen),
               title: const Text('Call'),
               subtitle: Text(card.phoneNumber),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                // TODO: Implement phone call
+                try {
+                  final Uri phoneUri = Uri(scheme: 'tel', path: card.phoneNumber);
+                  if (await canLaunchUrl(phoneUri)) {
+                    await launchUrl(phoneUri);
+                  } else {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Cannot make phone calls on this device'),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                    }
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error making phone call: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
               },
             ),
             ListTile(
               leading: const Icon(Icons.message, color: AppTheme.primaryBlue),
               title: const Text('Send Message'),
               subtitle: const Text('Send SMS or WhatsApp'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                // TODO: Implement messaging
+                try {
+                  // Try WhatsApp first
+                  final Uri whatsappUri = Uri.parse('whatsapp://send?phone=${card.phoneNumber}');
+                  if (await canLaunchUrl(whatsappUri)) {
+                    await launchUrl(whatsappUri);
+                  } else {
+                    // Fallback to SMS
+                    final Uri smsUri = Uri(scheme: 'sms', path: card.phoneNumber);
+                    if (await canLaunchUrl(smsUri)) {
+                      await launchUrl(smsUri);
+                    } else {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Cannot send messages on this device'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      }
+                    }
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error sending message: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
               },
             ),
             ListTile(
               leading: const Icon(Icons.email, color: AppTheme.verifiedYellow),
               title: const Text('Email'),
               subtitle: Text(card.companyEmail ?? 'No email available'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                // TODO: Implement email
+                try {
+                  if (card.companyEmail != null && card.companyEmail!.isNotEmpty) {
+                    final Uri emailUri = Uri(
+                      scheme: 'mailto',
+                      path: card.companyEmail,
+                      query: 'subject=Contact from TrustCard&body=Hello ${card.fullName},',
+                    );
+                    if (await canLaunchUrl(emailUri)) {
+                      await launchUrl(emailUri);
+                    } else {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Cannot send email on this device'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      }
+                    }
+                  } else {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('No email address available'),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                    }
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error sending email: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
               },
             ),
           ],
@@ -454,13 +614,28 @@ class _ScanCardScreenState extends State<ScanCardScreen> {
     );
   }
 
-  void _shareCard(UserCard card) {
-    // TODO: Implement card sharing
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Card sharing feature coming soon!'),
-        backgroundColor: AppTheme.primaryBlue,
-      ),
-    );
+  void _shareCard(UserCard card) async {
+    try {
+      final String shareText = 'Contact: ${card.fullName}\n'
+          'Phone: ${card.phoneNumber}\n'
+          'Company: ${card.companyName}\n'
+          'Designation: ${card.designation}\n'
+          'Email: ${card.companyEmail ?? 'Not available'}\n\n'
+          'Shared via TrustCard App';
+      
+      await Share.share(
+        shareText,
+        subject: 'Contact from TrustCard',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sharing contact: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -20,8 +21,15 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _isOtpSent = false;
   bool _isLoading = false;
   bool _isSignUp = false;
-  String _inputType = 'unknown'; // 'phone', 'email', 'unknown'
+  bool _isPhoneValid = false;
+  // Removed _inputType - phone-only authentication
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // No pre-fill - user enters 10-digit Indian number directly
+  }
 
   @override
   void dispose() {
@@ -59,7 +67,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Icon(
@@ -97,8 +105,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 if (!_isOtpSent) _buildUniversalInputForm(),
                 if (_isOtpSent) _buildOtpForm(),
                 
-                // Social Sign-in Options (only show if not OTP mode)
-                if (!_isOtpSent) _buildSocialSignIn(),
+                // Social Sign-in Options removed - using phone/email only
 
                 const SizedBox(height: 40),
 
@@ -128,7 +135,7 @@ class _AuthScreenState extends State<AuthScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -149,7 +156,7 @@ class _AuthScreenState extends State<AuthScreen> {
           const SizedBox(height: 8),
           
           Text(
-            'We sent a 4-digit code to ${_inputController.text}',
+            'We sent a 6-digit code to ${_inputController.text}',
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey[600],
@@ -161,16 +168,17 @@ class _AuthScreenState extends State<AuthScreen> {
           TextFormField(
             controller: _otpController,
             keyboardType: TextInputType.number,
-            maxLength: 4,
+            maxLength: 6,
             textAlign: TextAlign.center,
             style: const TextStyle(
+              color: Colors.black,
               fontSize: 24,
               fontWeight: FontWeight.bold,
               letterSpacing: 8,
             ),
             decoration: InputDecoration(
               labelText: 'OTP',
-              hintText: '1234',
+              hintText: '123456',
               prefixIcon: const Icon(Icons.security),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -181,8 +189,8 @@ class _AuthScreenState extends State<AuthScreen> {
               if (value == null || value.isEmpty) {
                 return 'Please enter the OTP';
               }
-              if (value.length != 4) {
-                return 'Please enter a valid 4-digit OTP';
+              if (value.length != 6) {
+                return 'Please enter a valid 6-digit OTP';
               }
               return null;
             },
@@ -193,9 +201,9 @@ class _AuthScreenState extends State<AuthScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.withOpacity(0.3)),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -273,35 +281,81 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      // Using stub implementation for now
-      print('Firebase Auth disabled - using stub implementation for OTP');
+      // Use real Firebase phone authentication
+      print('Sending OTP via Firebase...');
       
-      // Simulate OTP sending delay
-      await Future.delayed(const Duration(seconds: 1));
+      // Format phone number for Firebase (auto-add +91 for Indian numbers)
+      String phoneNumber = _inputController.text.trim();
       
-      setState(() {
-        _isOtpSent = true;
-        _isLoading = false;
-      });
+      // Handle test numbers first (don't add +91 for test numbers)
+      if (phoneNumber == '8888888888') {
+        phoneNumber = '+918888888888'; // Convert test number to proper format
+      } else if (!phoneNumber.startsWith('+')) {
+        phoneNumber = '+91$phoneNumber'; // Auto-add +91 for other Indian numbers
+      }
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('OTP sent successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      print('Formatted phone number: $phoneNumber');
+      
+      final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+      final success = await authProvider.sendOTP(phoneNumber);
+      
+      print('OTP send result: $success');
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        
+        if (success) {
+          // Check if user was auto-verified (for test phone numbers)
+          if (authProvider.currentUser != null) {
+            // User was auto-verified, navigate to home
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Phone verified successfully!'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+              context.go('/');
+            }
+          } else {
+            // Wait for verification ID to be set before showing OTP input
+            // This ensures the OTP verification will work properly
+            Future.delayed(const Duration(milliseconds: 500), () {
+              if (mounted) {
+                setState(() {
+                  _isOtpSent = true;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('OTP sent successfully! Check your SMS.'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            });
+          }
+        } else {
+          setState(() {
+            _error = authProvider.error ?? 'Phone authentication requires a real device to receive SMS. Simulators cannot receive SMS messages. Please test on a physical device or use email authentication instead.';
+          });
+        }
+      }
     } catch (e) {
-      setState(() {
-        _error = 'Error: $e';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = 'Error: $e';
+          _isLoading = false;
+        });
+      }
     }
   }
 
   Future<void> _verifyOtp() async {
-    if (_otpController.text.isEmpty || _otpController.text.length != 4) {
+    if (_otpController.text.isEmpty || _otpController.text.length != 6) {
       setState(() {
-        _error = 'Please enter a valid 4-digit OTP';
+        _error = 'Please enter a valid 6-digit OTP';
       });
       return;
     }
@@ -312,29 +366,41 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      // Using stub implementation for now
-      print('Firebase Auth disabled - using stub implementation for OTP verification');
+      // Use real Firebase OTP verification
+      print('Verifying OTP via Firebase...');
       
-      // Simulate verification delay
-      await Future.delayed(const Duration(seconds: 1));
+      // Format phone number for Firebase (auto-add +91 for Indian numbers)
+      String phoneNumber = _inputController.text.trim();
       
-      // For demo purposes, accept any 4-digit OTP
+      // Handle test numbers first (don't add +91 for test numbers)
+      if (phoneNumber == '8888888888') {
+        phoneNumber = '+918888888888'; // Convert test number to proper format
+      } else if (!phoneNumber.startsWith('+')) {
+        phoneNumber = '+91$phoneNumber'; // Auto-add +91 for other Indian numbers
+      }
+      
+      // Use AuthProvider's real Firebase OTP verification
+      final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+      final success = await authProvider.verifyOTP(phoneNumber, _otpController.text);
+      
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
         
-        // Update AuthProvider with successful authentication
-        final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
-        await authProvider.login(_inputController.text, '');
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('OTP verified successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        context.go('/');
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('OTP verified successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          context.go('/');
+        } else {
+          setState(() {
+            _error = authProvider.error ?? 'OTP verification failed';
+          });
+        }
       }
     } catch (e) {
       setState(() {
@@ -351,22 +417,38 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      // Using stub implementation for now
-      print('Firebase Auth disabled - using stub implementation for OTP resend');
+      // Use real Firebase phone authentication
+      print('Resending OTP via Firebase...');
       
-      // Simulate resend delay
-      await Future.delayed(const Duration(seconds: 1));
+      // Format phone number for Firebase (auto-add +91 for Indian numbers)
+      String phoneNumber = _inputController.text.trim();
+      
+      // Handle test numbers first (don't add +91 for test numbers)
+      if (phoneNumber == '8888888888') {
+        phoneNumber = '+918888888888'; // Convert test number to proper format
+      } else if (!phoneNumber.startsWith('+')) {
+        phoneNumber = '+91$phoneNumber'; // Auto-add +91 for other Indian numbers
+      }
+      
+      final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+      final success = await authProvider.sendOTP(phoneNumber);
       
       setState(() {
         _isLoading = false;
       });
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('OTP sent successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('OTP sent successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        setState(() {
+          _error = authProvider.error ?? 'Failed to send OTP';
+        });
+      }
     } catch (e) {
       setState(() {
         _error = 'Error: $e';
@@ -383,7 +465,7 @@ class _AuthScreenState extends State<AuthScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -417,58 +499,55 @@ class _AuthScreenState extends State<AuthScreen> {
           
           TextFormField(
             controller: _inputController,
-            keyboardType: TextInputType.text,
-            onChanged: _detectInputType,
-            decoration: InputDecoration(
-              labelText: 'Phone Number or Email',
-              hintText: '+91 9876543210 or user@example.com',
-              prefixIcon: Icon(_getInputIcon()),
+            keyboardType: TextInputType.phone,
+            maxLength: 10,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(10),
+            ],
+            onChanged: (value) {
+              setState(() {
+                _isPhoneValid = value.length == 10 && RegExp(r'^[6-9]').hasMatch(value);
+              });
+            },
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 16,
+            ),
+            decoration: const InputDecoration(
+              labelText: 'Phone Number',
+              hintText: '9876543210',
+              helperText: 'Enter your 10-digit Indian mobile number',
+              helperMaxLines: 2,
+              prefixIcon: Icon(Icons.phone),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.all(Radius.circular(12)),
               ),
             ),
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Please enter your phone number or email';
+                return 'Please enter your phone number';
+              }
+              // Phone number validation for Indian numbers (10 digits)
+              if (value.length != 10) {
+                return 'Indian phone number must be 10 digits';
+              }
+              // Check if it starts with valid Indian mobile prefixes (6,7,8,9)
+              if (!RegExp(r'^[6-9]').hasMatch(value)) {
+                return 'Indian mobile number must start with 6, 7, 8, or 9';
               }
               return null;
             },
           ),
-          
-          // Show password field if email is detected
-          if (_inputType == 'email') ...[
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: 'Password',
-                hintText: 'Enter your password',
-                prefixIcon: const Icon(Icons.lock),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter your password';
-                }
-                if (value.length < 6) {
-                  return 'Password must be at least 6 characters';
-                }
-                return null;
-              },
-            ),
-          ],
           
           if (_error != null) ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.withOpacity(0.3)),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -485,12 +564,59 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
           ],
           
+          // Debug button for OTP troubleshooting
+          if (_isOtpSent) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+                      authProvider.debugOTPSession();
+                    },
+                    icon: const Icon(Icons.bug_report, size: 16),
+                    label: const Text('Debug OTP'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+                      authProvider.clearOTPSession();
+                      setState(() {
+                        _isOtpSent = false;
+                        _otpController.clear();
+                        _error = null;
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('OTP session cleared. Please request a new OTP.'),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Clear & Retry'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          
           const SizedBox(height: 20),
           
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _isLoading ? null : _handleUniversalAuth,
+              onPressed: (_isLoading || !_isPhoneValid) ? null : _handleUniversalAuth,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryBlue,
                 foregroundColor: Colors.white,
@@ -538,69 +664,22 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  void _detectInputType(String value) {
-    setState(() {
-      if (value.contains('@') && value.contains('.')) {
-        _inputType = 'email';
-      } else if (RegExp(r'^\+?[\d\s\-\(\)]+$').hasMatch(value.replaceAll(' ', ''))) {
-        _inputType = 'phone';
-      } else {
-        _inputType = 'unknown';
-      }
-    });
-  }
-
-  IconData _getInputIcon() {
-    switch (_inputType) {
-      case 'email':
-        return Icons.email;
-      case 'phone':
-        return Icons.phone;
-      default:
-        return Icons.person;
-    }
-  }
+  // Removed _detectInputType and _getInputIcon - phone-only authentication
 
   String _getButtonText() {
-    if (_inputType == 'phone') {
-      return 'Send OTP';
-    } else if (_inputType == 'email') {
-      return _isSignUp ? 'Create Account' : 'Sign In';
-    } else {
-      return 'Continue';
-    }
+    return 'Send OTP';
   }
 
   Future<void> _handleUniversalAuth() async {
     if (_inputController.text.isEmpty) {
       setState(() {
-        _error = 'Please enter your phone number or email';
+        _error = 'Please enter your phone number';
       });
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      if (_inputType == 'phone') {
-        await _sendOtp();
-      } else if (_inputType == 'email') {
-        await _handleEmailAuth(_inputController.text, _passwordController.text, _isSignUp);
-      } else {
-        setState(() {
-          _error = 'Please enter a valid phone number or email';
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _error = 'Error: $e';
-        _isLoading = false;
-      });
-    }
+    // Phone-only authentication - send OTP
+    await _sendOtp();
   }
 
 
@@ -645,90 +724,9 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
 
-  Widget _buildSocialSignIn() {
-    return Container(
-      margin: const EdgeInsets.only(top: 24),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(child: Divider(color: Colors.grey[300])),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  'OR',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              Expanded(child: Divider(color: Colors.grey[300])),
-            ],
-          ),
-          
-          const SizedBox(height: 20),
-          
-          // Social Sign In Buttons
-          Row(
-            children: [
-              Expanded(
-                child: _buildSocialButton(
-                  icon: Icons.g_mobiledata,
-                  label: 'Google',
-                  onPressed: _signInWithGoogle,
-                  color: Colors.red,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildSocialButton(
-                  icon: Icons.apple,
-                  label: 'Apple',
-                  onPressed: _signInWithApple,
-                  color: Colors.black,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
 
 
-  Widget _buildSocialButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onPressed,
-    required Color color,
-  }) {
-    return OutlinedButton.icon(
-      onPressed: _isLoading ? null : onPressed,
-      icon: Icon(icon, color: color),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        side: BorderSide(color: color.withOpacity(0.5)),
-      ),
-    );
-  }
 
   Future<void> _handleEmailAuth(String email, String password, bool isSignUp) async {
     if (email.isEmpty || password.isEmpty) {
@@ -785,85 +783,4 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  Future<void> _signInWithGoogle() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      final result = await FirebaseService.signInWithGoogle();
-      if (result != null) {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-          
-          // Update AuthProvider with successful authentication
-          final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
-          await authProvider.login(result.user?.email ?? result.user?.phoneNumber ?? '', '');
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Signed in with Google successfully!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          
-          context.go('/');
-        }
-      } else {
-        setState(() {
-          _error = 'Google sign-in failed';
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _error = 'Error: $e';
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _signInWithApple() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      final result = await FirebaseService.signInWithApple();
-      if (result != null) {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-          
-          // Update AuthProvider with successful authentication
-          final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
-          await authProvider.login(result.user?.email ?? result.user?.phoneNumber ?? '', '');
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Signed in with Apple successfully!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          
-          context.go('/');
-        }
-      } else {
-        setState(() {
-          _error = 'Apple sign-in failed';
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _error = 'Error: $e';
-        _isLoading = false;
-      });
-    }
-  }
 }

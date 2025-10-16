@@ -212,11 +212,13 @@ class _MyCardsScreenState extends State<MyCardsScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
+              // Get the parent context before closing the dialog
+              final parentContext = Navigator.of(context).context;
               Navigator.of(context).pop();
               
               // Show loading
               showDialog(
-                context: context,
+                context: parentContext,
                 barrierDismissible: false,
                 builder: (context) => const Center(
                   child: CircularProgressIndicator(),
@@ -224,34 +226,40 @@ class _MyCardsScreenState extends State<MyCardsScreen> {
               );
 
               try {
-                final cardProvider = Provider.of<CardProvider>(context, listen: false);
+                final cardProvider = Provider.of<CardProvider>(parentContext, listen: false);
                 final success = await cardProvider.deleteCard(card.id);
                 
-                Navigator.of(context).pop(); // Close loading dialog
-                
-                if (success) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Card "${card.fullName}" deleted successfully'),
-                      backgroundColor: AppTheme.verifiedGreen,
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to delete card: ${cardProvider.error ?? "Unknown error"}'),
-                      backgroundColor: AppTheme.error,
-                    ),
-                  );
+                if (mounted) {
+                  Navigator.of(parentContext).pop(); // Close loading dialog
+                  
+                  if (mounted) {
+                    if (success) {
+                      ScaffoldMessenger.of(parentContext).showSnackBar(
+                        SnackBar(
+                          content: Text('Card "${card.fullName}" deleted successfully'),
+                          backgroundColor: AppTheme.verifiedGreen,
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(parentContext).showSnackBar(
+                        SnackBar(
+                          content: Text('Failed to delete card: ${cardProvider.error ?? "Unknown error"}'),
+                          backgroundColor: AppTheme.error,
+                        ),
+                      );
+                    }
+                  }
                 }
               } catch (e) {
-                Navigator.of(context).pop(); // Close loading dialog
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Error deleting card: ${e.toString()}'),
-                    backgroundColor: AppTheme.error,
-                  ),
-                );
+                  if (mounted) {
+                    Navigator.of(parentContext).pop(); // Close loading dialog
+                    ScaffoldMessenger.of(parentContext).showSnackBar(
+                      SnackBar(
+                        content: Text('Error deleting card: ${e.toString()}'),
+                        backgroundColor: AppTheme.error,
+                      ),
+                    );
+                  }
               }
             },
             style: ElevatedButton.styleFrom(

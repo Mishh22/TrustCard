@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/notification_service.dart';
+import '../services/scan_notification_service.dart';
+import '../services/firebase_service.dart';
 import '../utils/app_theme.dart';
 
 class NotificationCenterScreen extends StatefulWidget {
@@ -11,49 +13,71 @@ class NotificationCenterScreen extends StatefulWidget {
 }
 
 class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
-  late NotificationService _notificationService;
-
-  @override
-  void initState() {
-    super.initState();
-    _notificationService = NotificationService();
-    _loadMockNotifications();
-  }
-
   @override
   Widget build(BuildContext context) {
+    final currentUser = FirebaseService.getCurrentUser();
+    
+    if (currentUser == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Notifications')),
+        body: _buildEmptyState(),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Notifications'),
         actions: [
           IconButton(
             icon: const Icon(Icons.mark_email_read),
-            onPressed: () => _markAllAsRead(),
+            onPressed: () => _markAllAsRead(currentUser.uid),
           ),
           IconButton(
             icon: const Icon(Icons.clear_all),
-            onPressed: () => _clearAllNotifications(),
+            onPressed: () => _clearAllNotifications(currentUser.uid),
           ),
         ],
       ),
-      body: Consumer<NotificationService>(
-        builder: (context, notificationService, child) {
-          if (notificationService.notifications.isEmpty) {
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: ScanNotificationService.getScanNotificationsStream(currentUser.uid),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error, size: 64, color: Colors.red),
+                  const SizedBox(height: 16),
+                  Text('Error loading notifications: ${snapshot.error}'),
+                ],
+              ),
+            );
+          }
+
+          final notifications = snapshot.data ?? [];
+          
+          if (notifications.isEmpty) {
             return _buildEmptyState();
           }
+
+          final unreadCount = notifications.where((n) => n['isRead'] == false).length;
 
           return Column(
             children: [
               // Notification Stats
-              _buildNotificationStats(),
+              _buildNotificationStats(notifications.length, unreadCount),
               
               // Notification List
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  itemCount: notificationService.notifications.length,
+                  itemCount: notifications.length,
                   itemBuilder: (context, index) {
-                    final notification = notificationService.notifications[index];
+                    final notification = notifications[index];
                     return _buildNotificationCard(notification);
                   },
                 ),
@@ -98,7 +122,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     );
   }
 
-  Widget _buildNotificationStats() {
+  Widget _buildNotificationStats(int totalCount, int unreadCount) {
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
@@ -128,9 +152,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Stay updated with verification requests and alerts',
+                  'Stay updated with card scans and alerts',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                   ),
                 ),
               ],
@@ -139,11 +163,11 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
-              '${_notificationService.unreadCount} Unread',
+              '$unreadCount Unread',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12,
@@ -156,42 +180,48 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     );
   }
 
-  Widget _buildNotificationCard(NotificationItem notification) {
+  Widget _buildNotificationCard(Map<String, dynamic> notification) {
+    final isRead = notification['isRead'] ?? false;
+    final title = notification['title'] ?? 'Notification';
+    final message = notification['message'] ?? '';
+    final createdAt = notification['createdAt'] as Timestamp?;
+    final timestamp = createdAt?.toDate() ?? DateTime.now();
+    
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: _getNotificationColor(notification.type).withOpacity(0.1),
+            color: AppTheme.primaryBlue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(
-            _getNotificationIcon(notification.type),
-            color: _getNotificationColor(notification.type),
+          child: const Icon(
+            Icons.qr_code_scanner,
+            color: AppTheme.primaryBlue,
             size: 20,
           ),
         ),
         title: Text(
-          notification.title,
+          title,
           style: TextStyle(
-            fontWeight: notification.isRead ? FontWeight.normal : FontWeight.bold,
+            fontWeight: isRead ? FontWeight.normal : FontWeight.bold,
           ),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(notification.message),
+            Text(message),
             const SizedBox(height: 4),
             Text(
-              _formatTimeAgo(notification.timestamp),
+              _formatTimeAgo(timestamp),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.grey[500],
               ),
             ),
           ],
         ),
-        trailing: notification.isRead
+        trailing: isRead
             ? null
             : Container(
                 width: 8,
@@ -206,62 +236,43 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     );
   }
 
-  void _loadMockNotifications() {
-    // Load mock notifications
-    final mockNotifications = MockNotificationService.getMockNotifications();
-    for (final notification in mockNotifications) {
-      _notificationService.addNotification(notification);
+  void _handleNotificationTap(Map<String, dynamic> notification) async {
+    final isRead = notification['isRead'] ?? false;
+    final notificationId = notification['id'];
+    
+    if (!isRead && notificationId != null) {
+      await ScanNotificationService.markAsRead(notificationId);
     }
+
+    // Show notification details
+    _showNotificationDetails(notification);
   }
 
-  void _handleNotificationTap(NotificationItem notification) {
-    if (!notification.isRead) {
-      _notificationService.markAsRead(notification.id);
-    }
-
-    // Handle different notification types
-    switch (notification.type) {
-      case NotificationType.verificationRequest:
-        _showVerificationRequestDetails(notification);
-        break;
-      case NotificationType.impersonationAlert:
-        _showImpersonationAlertDetails(notification);
-        break;
-      case NotificationType.documentVerification:
-        _showDocumentVerificationDetails(notification);
-        break;
-      case NotificationType.peerVerification:
-        _showPeerVerificationDetails(notification);
-        break;
-      case NotificationType.companyVerificationRequest:
-        _showCompanyVerificationDetails(notification);
-        break;
-      default:
-        _showGenericNotificationDetails(notification);
-    }
-  }
-
-  void _showVerificationRequestDetails(NotificationItem notification) {
+  void _showNotificationDetails(Map<String, dynamic> notification) {
+    final title = notification['title'] ?? 'Notification';
+    final message = notification['message'] ?? '';
+    final data = notification['data'] as Map<String, dynamic>?;
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(notification.title),
+        title: Text(title),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(notification.message),
-            const SizedBox(height: 16),
-            Text(
-              'User Details:',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text('Name: ${notification.data['userName']}'),
-            Text('Company: ${notification.data['companyName']}'),
-            Text('Designation: ${notification.data['designation']}'),
+            Text(message),
+            if (data != null) ...[
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 8),
+              if (data['scannerName'] != null)
+                Text('Scanner: ${data['scannerName']}'),
+              if (data['scannerCompany'] != null)
+                Text('Company: ${data['scannerCompany']}'),
+              if (data['location'] != null)
+                Text('Location: ${data['location']}'),
+            ],
           ],
         ),
         actions: [
@@ -269,149 +280,24 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // TODO: Navigate to company admin dashboard
-            },
-            child: const Text('Review Request'),
-          ),
         ],
       ),
     );
   }
 
-  void _showImpersonationAlertDetails(NotificationItem notification) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(notification.title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(notification.message),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.withOpacity(0.3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Reported User: ${notification.data['userName']}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  Text('Reported by: ${notification.data['reportedBy']}'),
-                ],
-              ),
-            ),
-          ],
+  void _markAllAsRead(String userId) async {
+    await ScanNotificationService.markAllAsRead(userId);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('All notifications marked as read'),
+          backgroundColor: AppTheme.verifiedGreen,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // TODO: Navigate to investigation screen
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Investigate'),
-          ),
-        ],
-      ),
-    );
+      );
+    }
   }
 
-  void _showDocumentVerificationDetails(NotificationItem notification) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(notification.title),
-        content: Text(notification.message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showPeerVerificationDetails(NotificationItem notification) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(notification.title),
-        content: Text(notification.message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showCompanyVerificationDetails(NotificationItem notification) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(notification.title),
-        content: Text(notification.message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // TODO: Navigate to company admin dashboard
-            },
-            child: const Text('Manage Requests'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showGenericNotificationDetails(NotificationItem notification) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(notification.title),
-        content: Text(notification.message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _markAllAsRead() {
-    _notificationService.markAllAsRead();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('All notifications marked as read'),
-        backgroundColor: AppTheme.verifiedGreen,
-      ),
-    );
-  }
-
-  void _clearAllNotifications() {
+  void _clearAllNotifications(String userId) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -423,53 +309,23 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              _notificationService.clearAll();
+            onPressed: () async {
               Navigator.pop(context);
+              await ScanNotificationService.deleteAllNotifications(userId);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('All notifications cleared'),
+                    backgroundColor: AppTheme.verifiedGreen,
+                  ),
+                );
+              }
             },
             child: const Text('Clear All', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
-  }
-
-  IconData _getNotificationIcon(NotificationType type) {
-    switch (type) {
-      case NotificationType.verificationRequest:
-        return Icons.verified_user;
-      case NotificationType.impersonationAlert:
-        return Icons.warning;
-      case NotificationType.documentVerification:
-        return Icons.description;
-      case NotificationType.peerVerification:
-        return Icons.people;
-      case NotificationType.companyVerificationRequest:
-        return Icons.business;
-      case NotificationType.systemUpdate:
-        return Icons.system_update;
-      case NotificationType.general:
-        return Icons.info;
-    }
-  }
-
-  Color _getNotificationColor(NotificationType type) {
-    switch (type) {
-      case NotificationType.verificationRequest:
-        return AppTheme.verifiedYellow;
-      case NotificationType.impersonationAlert:
-        return Colors.red;
-      case NotificationType.documentVerification:
-        return AppTheme.verifiedGreen;
-      case NotificationType.peerVerification:
-        return AppTheme.verifiedBlue;
-      case NotificationType.companyVerificationRequest:
-        return AppTheme.verifiedGold;
-      case NotificationType.systemUpdate:
-        return Colors.orange;
-      case NotificationType.general:
-        return Colors.grey;
-    }
   }
 
   String _formatTimeAgo(DateTime timestamp) {

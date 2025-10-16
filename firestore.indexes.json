@@ -1,0 +1,229 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "scan_history",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "cardOwnerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "scannedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "scan_notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "scan_notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isRead",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "consent_records",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "admin_audit_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "actorUserId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "sessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "sessionStart",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "marketing_attribution",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "firstTouchAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+      {
+        "collectionGroup": "error_events",
+        "queryScope": "COLLECTION",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "occurredAt",
+            "order": "DESCENDING"
+          }
+        ]
+      },
+      {
+        "collectionGroup": "risk_signals",
+        "queryScope": "COLLECTION",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "triggeredAt",
+            "order": "DESCENDING"
+          }
+        ]
+      },
+      {
+        "collectionGroup": "risk_outcomes",
+        "queryScope": "COLLECTION",
+        "fields": [
+          {
+            "fieldPath": "caseId",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "decidedAt",
+            "order": "DESCENDING"
+          }
+        ]
+      },
+      {
+        "collectionGroup": "notification_delivery",
+        "queryScope": "COLLECTION",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "sendAt",
+            "order": "DESCENDING"
+          }
+        ]
+      },
+      {
+        "collectionGroup": "fact_employment_events",
+        "queryScope": "COLLECTION",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "occurredAt",
+            "order": "DESCENDING"
+          }
+        ]
+      },
+      {
+        "collectionGroup": "transactions",
+        "queryScope": "COLLECTION",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "initiatedAt",
+            "order": "DESCENDING"
+          }
+        ]
+      },
+      {
+        "collectionGroup": "transactions",
+        "queryScope": "COLLECTION",
+        "fields": [
+          {
+            "fieldPath": "companyId",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "settledAt",
+            "order": "DESCENDING"
+          }
+        ]
+      },
+      {
+        "collectionGroup": "transactions",
+        "queryScope": "COLLECTION",
+        "fields": [
+          {
+            "fieldPath": "status",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "initiatedAt",
+            "order": "DESCENDING"
+          }
+        ]
+      },
+      {
+        "collectionGroup": "user_cards",
+        "queryScope": "COLLECTION",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "createdAt",
+            "order": "DESCENDING"
+          }
+        ]
+      }
+  ],
+  "fieldOverrides": []
+}

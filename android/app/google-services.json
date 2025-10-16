@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "818303002429",
+    "firebase_url": "https://trustcard-aee4a-default-rtdb.asia-southeast1.firebasedatabase.app",
     "project_id": "trustcard-aee4a",
     "storage_bucket": "trustcard-aee4a.firebasestorage.app"
   },
@@ -13,6 +14,22 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "818303002429-4lt55ubdjmnjeklilgknnhljk4o3vu3s.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.accexasia.TrustCard",
+            "certificate_hash": "b474daa647cc47772fa7b895ce3fc6411e2aa72e"
+          }
+        },
+        {
+          "client_id": "818303002429-651pub3t031e8dt5s0h6v6cd8auhv6te.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.accexasia.TrustCard",
+            "certificate_hash": "0e443af632fcaa13d4cd3601f8bdb32429c53c0e"
+          }
+        },
         {
           "client_id": "818303002429-9gunorf0r7f5nb4gjru9f0fhvfh5d6u3.apps.googleusercontent.com",
           "client_type": 1,
